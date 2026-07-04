@@ -40,7 +40,14 @@ def create_app(config_overrides: dict | None = None) -> Flask:
         app.config.update(config_overrides)
 
     # 3. Initialize extensions against this app instance.
-    mongo.init_app(app)
+    #    Server selection is bounded so /health fails fast (503 in ~2s) instead
+    #    of blocking the sole gunicorn worker for PyMongo's default 30s when
+    #    MongoDB is unreachable (readiness must fail by 503, not probe timeout).
+    app.config.setdefault("MONGO_SERVER_SELECTION_TIMEOUT_MS", 2000)
+    mongo.init_app(
+        app,
+        serverSelectionTimeoutMS=app.config["MONGO_SERVER_SELECTION_TIMEOUT_MS"],
+    )
     metrics.init_app(app)  # also auto-registers the /metrics endpoint
 
     # 4. Register blueprints — DEFERRED imports so this module is importable

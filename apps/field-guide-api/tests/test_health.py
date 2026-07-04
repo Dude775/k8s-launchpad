@@ -27,3 +27,31 @@ def test_health_down(mongo_down):
     assert resp.status_code == 503
     data = resp.get_json()
     assert data["mongo"] == "down"
+
+
+def test_mongo_server_selection_timeout_bounded():
+    """MongoClient server selection must be ~2s, not PyMongo's 30s default (WR-02).
+
+    Without this bound, a Mongo outage makes /health block the single
+    gunicorn worker for 30s per readinessProbe hit.
+    """
+    from app import create_app
+    from app.extensions import mongo
+
+    create_app({"TESTING": True, "MONGO_URI": "mongodb://localhost:27017/test_db"})
+    assert mongo.cx.options.server_selection_timeout == 2.0
+
+
+def test_mongo_server_selection_timeout_overridable():
+    """Config override MONGO_SERVER_SELECTION_TIMEOUT_MS must be honored."""
+    from app import create_app
+    from app.extensions import mongo
+
+    create_app(
+        {
+            "TESTING": True,
+            "MONGO_URI": "mongodb://localhost:27017/test_db",
+            "MONGO_SERVER_SELECTION_TIMEOUT_MS": 500,
+        }
+    )
+    assert mongo.cx.options.server_selection_timeout == 0.5
