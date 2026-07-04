@@ -76,6 +76,27 @@ def test_post_empty_body_returns_400(client):
     assert "error" in data
 
 
+def test_post_array_body_returns_400(client):
+    """POST /entries with a JSON array body returns 400 — never 500 (CR-01)."""
+    resp = client.post("/entries", json=[1, 2])
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_post_string_body_returns_400(client):
+    """POST /entries with a JSON string body returns 400 — never 500 (CR-01)."""
+    resp = client.post("/entries", json="just a string")
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_post_null_body_returns_400(client):
+    """POST /entries with no JSON body at all returns 400 — never 500 (CR-01)."""
+    resp = client.post("/entries", data="not json", content_type="text/plain")
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
 def test_post_missing_fields_does_not_persist(client):
     """Failed POST (400) must not insert any document into the collection."""
     client.post("/entries", json={})

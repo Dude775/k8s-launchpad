@@ -18,6 +18,7 @@ Response shape (JSON):
 Security notes (T-02-03):
   - All queries are passed as Python dicts — no string interpolation into queries.
   - ObjectId() wrapped in try/except: malformed id → 404, never 500.
+  - Non-object JSON bodies (arrays, strings, numbers) → 400, never 500.
   - Required-field check returns 400 before touching the DB.
 """
 
@@ -68,7 +69,9 @@ def create_entry():
     Required body fields: title, content.
     Returns 201 with the created entry, or 400 if validation fails.
     """
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
 
     title = str(data.get("title", "")).strip()
     content = str(data.get("content", "")).strip()
