@@ -2,8 +2,9 @@
 Test fixtures providing an isolated Flask test app with in-memory MongoDB.
 
 No real MongoDB or network is used in any test. MongoDB is simulated via
-mongomock, which is injected by replacing Flask-PyMongo's extension state
-in app.extensions["pymongo"].
+mongomock, which is injected by monkeypatching the cx and db instance
+attributes on the shared PyMongo singleton (Flask-PyMongo 3.x stores both
+directly on the PyMongo instance, not in app.extensions).
 
 Fixtures:
     app         — test app with mocked MongoDB (fresh collection per test)
@@ -15,38 +16,19 @@ import mongomock
 import pytest
 
 
-class _PyMongoState:
-    """Flask-PyMongo extension state replacement.
-
-    Supports both attribute access (state.cx) and dict-style access
-    (state["cx"]) so it is compatible with any Flask-PyMongo 3.x
-    internal access pattern.
-    """
-
-    def __init__(self, cx, db):
-        self.cx = cx
-        self.db = db
-
-    def __getitem__(self, key):
-        return getattr(self, key)
-
-    def __setitem__(self, key, val):
-        setattr(self, key, val)
-
-
 @pytest.fixture
-def app():
-    """Isolated Flask test app with in-memory MongoDB.
+def app(monkeypatch):
+    """Isolated Flask test app with in-memory MongoDB (no network).
 
-    Steps:
-    1. Create the real app (TESTING=True) — Flask-PyMongo registers a
-       real MongoClient, but PyMongo connections are lazy so no network
-       call happens in the constructor.
-    2. Replace app.extensions["pymongo"] with mongomock equivalents.
-    3. Drop the entries collection so each test starts clean.
+    Flask-PyMongo 3.x init_app() sets self.cx and self.db directly on the
+    PyMongo singleton. We replace both with mongomock equivalents after
+    create_app() returns, so all subsequent DB access goes through the
+    in-memory store. monkeypatch restores originals after each test.
     """
     from app import create_app
+    from app.extensions import mongo
 
+    # create_app sets mongo.cx = MongoClient(connect=False) — lazy, no socket yet.
     application = create_app(
         {
             "TESTING": True,
@@ -57,12 +39,11 @@ def app():
     mock_client = mongomock.MongoClient()
     mock_db = mock_client["test_db"]
 
-    # Replace Flask-PyMongo's stored state. The mongo.cx and mongo.db
-    # properties read from current_app.extensions["pymongo"], so swapping
-    # this dict makes all subsequent DB access go through mongomock.
-    application.extensions["pymongo"] = _PyMongoState(mock_client, mock_db)
+    # Patch the singleton's instance attributes; monkeypatch auto-restores on teardown.
+    monkeypatch.setattr(mongo, "cx", mock_client)
+    monkeypatch.setattr(mongo, "db", mock_db)
 
-    # Ensure a clean slate for every test (order-independent tests).
+    # Ensure clean slate for every test (order-independent execution).
     mock_db.entries.drop()
 
     yield application
@@ -79,7 +60,7 @@ def mongo_down(client, monkeypatch):
     """Test client that simulates a MongoDB outage.
 
     Patches the mongo reference inside health.py so that
-    mongo.cx.admin.command("ping") raises a connection error, causing
+    mongo.cx.admin.command("ping") raises ConnectionFailure, causing
     GET /health to return 503.
     """
     import pymongo.errors
