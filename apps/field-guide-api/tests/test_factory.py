@@ -10,7 +10,6 @@ Behavior under test:
 - extensions module exposes PyMongo() and PrometheusMetrics singletons
 """
 
-import os
 import pytest
 
 
@@ -29,17 +28,18 @@ def test_config_has_mongo_uri():
     assert Config.MONGO_URI.startswith("mongodb://")
 
 
-def test_config_debug_defaults_false():
-    """DEBUG must be falsy when FLASK_DEBUG is absent from the environment."""
-    os.environ.pop("FLASK_DEBUG", None)
-    # Re-import after env change so module-level eval picks it up
-    import importlib
-    import app.config as cfg_module
+def test_config_debug_defaults_false(monkeypatch):
+    """DEBUG must be falsy when FLASK_DEBUG is absent from the environment.
 
-    importlib.reload(cfg_module)
-    from app.config import Config
+    Tests the parsing helper directly (no module reload, no global env
+    mutation): reloading config re-runs load_dotenv(), which would re-read
+    FLASK_DEBUG from a developer's local .env and make this test flaky.
+    monkeypatch.delenv auto-restores the variable after the test.
+    """
+    from app.config import _env_flag
 
-    assert not Config.DEBUG
+    monkeypatch.delenv("FLASK_DEBUG", raising=False)
+    assert _env_flag("FLASK_DEBUG") is False
 
 
 def test_env_flag_zero_and_false_disable_debug(monkeypatch):
