@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Scaffold monorepo layout + git hygiene (.gitignore/.gitattributes first, PRD-2/PRD-4 dir seams)
+- [x] 01-01-PLAN.md — Scaffold monorepo layout + git hygiene (.gitignore/.gitattributes first, PRD-2/PRD-4 dir seams)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -95,7 +95,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scaffold + App + Tests | 0/3 | Not started | - |
+| 1. Scaffold + App + Tests | 1/3 | In Progress|  |
 | 2. Cluster Infrastructure | 0/TBD | Not started | - |
 | 3. Containerization + Helm Deployment | 0/TBD | Not started | - |
 | 4. Makefile + Documentation | 0/TBD | Not started | - |
