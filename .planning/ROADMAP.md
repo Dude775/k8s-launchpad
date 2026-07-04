@@ -13,7 +13,7 @@ PRD-1 builds the foundation of a self-hosted Internal Developer Platform: a Flas
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Scaffold + App + Tests** - Monorepo layout, Flask field-guide API, and passing test suite — all runnable without a cluster
+- [x] **Phase 1: Scaffold + App + Tests** - Monorepo layout, Flask field-guide API, and passing test suite — all runnable without a cluster (completed 2026-07-04)
 - [ ] **Phase 2: Cluster Infrastructure** - Idempotent kind cluster with wired local registry
 - [ ] **Phase 3: Containerization + Helm Deployment** - App running in-cluster, reachable locally, backed by in-cluster MongoDB
 - [ ] **Phase 4: Makefile + Documentation** - Full developer loop wired end-to-end; project is self-documenting
@@ -45,7 +45,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — pytest suite with mocked MongoDB covering all endpoints + minimal `make test` target
+- [x] 01-03-PLAN.md — pytest suite with mocked MongoDB covering all endpoints + minimal `make test` target
 
 ### Phase 2: Cluster Infrastructure
 
@@ -95,7 +95,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scaffold + App + Tests | 2/3 | In Progress|  |
+| 1. Scaffold + App + Tests | 3/3 | Complete   | 2026-07-04 |
 | 2. Cluster Infrastructure | 0/TBD | Not started | - |
 | 3. Containerization + Helm Deployment | 0/TBD | Not started | - |
 | 4. Makefile + Documentation | 0/TBD | Not started | - |
