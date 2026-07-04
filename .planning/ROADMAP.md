@@ -29,7 +29,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The Flask app starts locally and serves GET /entries, GET /entries/:id, and POST /entries backed by MongoDB connection string from env
   4. GET /health returns 200 when MongoDB is reachable and 503 when it is not; GET /metrics returns Prometheus-format text
   5. Directory layout matches the target monorepo structure including placeholder dirs for PRD-2 (`infra/argocd/`) and PRD-4 (`infra/observability/`) seams
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Scaffold monorepo layout + git hygiene (.gitignore/.gitattributes first, PRD-2/PRD-4 dir seams)
+- [ ] 01-02-PLAN.md — Flask field-guide API: app factory, entries CRUD, /health readiness, /metrics seam (env-driven config, gunicorn entrypoint)
+- [ ] 01-03-PLAN.md — pytest suite with mocked MongoDB covering all endpoints + minimal `make test` target
 
 ### Phase 2: Cluster Infrastructure
 **Goal**: A local kind cluster with a wired local registry is available as a reusable, idempotent target that cluster pods can pull images from
@@ -70,7 +74,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scaffold + App + Tests | 0/TBD | Not started | - |
+| 1. Scaffold + App + Tests | 0/3 | Not started | - |
 | 2. Cluster Infrastructure | 0/TBD | Not started | - |
 | 3. Containerization + Helm Deployment | 0/TBD | Not started | - |
 | 4. Makefile + Documentation | 0/TBD | Not started | - |
