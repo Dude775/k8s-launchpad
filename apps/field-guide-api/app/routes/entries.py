@@ -79,11 +79,15 @@ def create_entry():
     if not title or not content:
         return jsonify({"error": "title and content are required"}), 400
 
+    tags = data.get("tags", [])
+    if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+        return jsonify({"error": "tags must be a list of strings"}), 400
+
     doc = {
         "title": title,
         "category": str(data.get("category", "general")),
         "content": content,
-        "tags": list(data.get("tags", [])),
+        "tags": tags,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 

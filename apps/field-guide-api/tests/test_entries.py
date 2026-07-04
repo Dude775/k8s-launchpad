@@ -97,6 +97,36 @@ def test_post_null_body_returns_400(client):
     assert "error" in resp.get_json()
 
 
+def test_post_non_iterable_tags_returns_400(client):
+    """POST /entries with tags=5 returns 400 — never 500 (CR-02)."""
+    resp = client.post("/entries", json={"title": "t", "content": "c", "tags": 5})
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_post_string_tags_returns_400(client):
+    """POST /entries with tags="abc" returns 400 — no char-splitting (CR-02)."""
+    resp = client.post("/entries", json={"title": "t", "content": "c", "tags": "abc"})
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_post_non_string_tag_items_returns_400(client):
+    """POST /entries with a non-string element inside tags returns 400 (CR-02)."""
+    resp = client.post("/entries", json={"title": "t", "content": "c", "tags": ["ok", 1]})
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_post_valid_tags_stored_verbatim(client):
+    """POST /entries with a valid list of string tags stores it unchanged."""
+    resp = client.post(
+        "/entries", json={"title": "t", "content": "c", "tags": ["k8s", "helm"]}
+    )
+    assert resp.status_code == 201
+    assert resp.get_json()["tags"] == ["k8s", "helm"]
+
+
 def test_post_missing_fields_does_not_persist(client):
     """Failed POST (400) must not insert any document into the collection."""
     client.post("/entries", json={})
