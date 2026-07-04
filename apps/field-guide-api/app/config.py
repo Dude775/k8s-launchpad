@@ -14,6 +14,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _env_flag(name: str, default: str = "") -> bool:
+    """Parse a boolean env var the way Flask's CLI does.
+
+    Only "1", "true", "yes", "on" (case-insensitive) enable the flag;
+    "0", "false", empty, or unset all disable it — so FLASK_DEBUG=0
+    never accidentally turns debug mode ON.
+    """
+    return os.environ.get(name, default).strip().lower() in ("1", "true", "yes", "on")
+
+
 class Config:
     # MongoDB connection string — must be env-supplied; local default for dev only.
     # Never embed a real URI or password here.
@@ -22,8 +32,9 @@ class Config:
     )
     MONGO_DBNAME: str = os.environ.get("MONGO_DBNAME", "fieldguide")
 
-    # Debug mode is opt-in via FLASK_DEBUG; default is False (secure in containers).
-    DEBUG: bool = bool(os.environ.get("FLASK_DEBUG", ""))
+    # Debug mode is opt-in via FLASK_DEBUG=1/true/yes/on; default is False.
+    # FLASK_DEBUG=0 / FLASK_DEBUG=false explicitly disable it (secure in containers).
+    DEBUG: bool = _env_flag("FLASK_DEBUG")
 
     # Never enable TESTING by default — tests override this via create_app().
     TESTING: bool = False

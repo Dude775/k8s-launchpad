@@ -42,6 +42,24 @@ def test_config_debug_defaults_false():
     assert not Config.DEBUG
 
 
+def test_env_flag_zero_and_false_disable_debug(monkeypatch):
+    """FLASK_DEBUG=0 / false / no / off must parse as False (WR-01)."""
+    from app.config import _env_flag
+
+    for value in ("0", "false", "False", "no", "off", ""):
+        monkeypatch.setenv("FLASK_DEBUG", value)
+        assert _env_flag("FLASK_DEBUG") is False, f"value={value!r}"
+
+
+def test_env_flag_truthy_values_enable_debug(monkeypatch):
+    """FLASK_DEBUG=1 / true / yes / on must parse as True (WR-01)."""
+    from app.config import _env_flag
+
+    for value in ("1", "true", "TRUE", "yes", "on", " 1 "):
+        monkeypatch.setenv("FLASK_DEBUG", value)
+        assert _env_flag("FLASK_DEBUG") is True, f"value={value!r}"
+
+
 def test_extensions_mongo_singleton():
     """extensions.mongo must be a PyMongo() instance (unbound)."""
     from flask_pymongo import PyMongo
