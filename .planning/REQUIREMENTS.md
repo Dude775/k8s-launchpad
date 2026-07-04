@@ -95,13 +95,33 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmap) | | |
+| SCAF-01 | Phase 1 | Pending |
+| SCAF-02 | Phase 1 | Pending |
+| SCAF-03 | Phase 1 | Pending |
+| API-01 | Phase 1 | Pending |
+| API-02 | Phase 1 | Pending |
+| API-03 | Phase 1 | Pending |
+| API-04 | Phase 1 | Pending |
+| API-05 | Phase 1 | Pending |
+| API-06 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Pending |
+| CLUS-01 | Phase 2 | Pending |
+| CLUS-02 | Phase 2 | Pending |
+| IMG-01 | Phase 3 | Pending |
+| IMG-02 | Phase 3 | Pending |
+| HELM-01 | Phase 3 | Pending |
+| HELM-02 | Phase 3 | Pending |
+| HELM-03 | Phase 3 | Pending |
+| HELM-04 | Phase 3 | Pending |
+| MAKE-01 | Phase 4 | Pending |
+| MAKE-02 | Phase 4 | Pending |
+| DOCS-01 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️ (pending roadmap)
+- v1 requirements: 21 total (count corrected from initial 19 estimate)
+- Mapped to phases: 21
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-04*
-*Last updated: 2026-07-04 after initial definition*
+*Last updated: 2026-07-04 after roadmap creation (traceability populated)*
