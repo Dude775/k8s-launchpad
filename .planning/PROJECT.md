@@ -14,20 +14,19 @@ k8s-launchpad is a self-hosted Internal Developer Platform (IDP) — a "mini-Her
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Working Flask field-guide API: REST CRUD for markdown-based DevOps knowledge entries (GET list, GET by id, POST create), MongoDB-backed — Validated in Phase 1: Scaffold + App + Tests
+- [x] `/health` endpoint returns 200; `/metrics` exposes basic Prometheus-format metrics — Validated in Phase 1
+- [x] Unit tests for API endpoints (pytest), passing via `make test` — Validated in Phase 1 (32 tests, 100% coverage, venv-based test target)
+- [x] .gitignore covering .env, __pycache__, .venv, *.pyc, kubeconfig — in place BEFORE first meaningful commit — Validated in Phase 1 (first commit)
 
 ### Active
 
-- [ ] Working Flask field-guide API: REST CRUD for markdown-based DevOps knowledge entries (GET list, GET by id, POST create), MongoDB-backed
-- [ ] `/health` endpoint returns 200; `/metrics` exposes basic Prometheus-format metrics
-- [ ] Unit tests for API endpoints (pytest), passing via `make test`
 - [ ] Dockerfile producing a small, working image
 - [ ] kind cluster config + script/Makefile target to spin it up with a local registry
 - [ ] Helm chart deploying the app (Deployment, Service, ConfigMap, Secret template, values.yaml); app reachable locally
 - [ ] MongoDB running in-cluster (Helm dependency or simple manifest)
-- [ ] Makefile targets: cluster-up, cluster-down, build, load, deploy, test, clean — working under WSL2 / Git Bash
+- [ ] Makefile targets: cluster-up, cluster-down, build, load, deploy, test, clean — working under WSL2 / Git Bash (test target done in Phase 1)
 - [ ] README documenting end-to-end local setup (clone → make cluster-up → make deploy → curl)
-- [ ] .gitignore covering .env, __pycache__, .venv, *.pyc, kubeconfig — in place BEFORE first meaningful commit
 
 ### Out of Scope
 
@@ -84,5 +83,9 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
+## Current State
+
+Phase 1 complete (2026-07-05) — monorepo scaffold, working Flask field-guide API (app factory, Flask-PyMongo, /health with 2s Mongo timeout, /metrics), and a 32-test pytest suite at 100% coverage running via venv-based `make test`. Code review done: 2 Critical + 5 Warning findings all fixed. Next: Phase 2 — kind cluster + local registry.
+
 ---
-*Last updated: 2026-07-04 after initialization*
+*Last updated: 2026-07-05 after Phase 1 completion*
