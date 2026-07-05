@@ -62,7 +62,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Author kind cluster config + cluster-setup.sh (six-step registry wiring + verify) + cluster-teardown.sh + Makefile cluster-up/cluster-down targets
+- [x] 02-01-PLAN.md — Author kind cluster config + cluster-setup.sh (six-step registry wiring + verify) + cluster-teardown.sh + Makefile cluster-up/cluster-down targets
 
 **Wave 2** *(blocked on Wave 1; human gate — kind install)*
 
@@ -104,6 +104,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scaffold + App + Tests | 3/3 | Complete   | 2026-07-04 |
-| 2. Cluster Infrastructure | 0/2 | Planned | - |
+| 2. Cluster Infrastructure | 1/2 | In Progress|  |
 | 3. Containerization + Helm Deployment | 0/TBD | Not started | - |
 | 4. Makefile + Documentation | 0/TBD | Not started | - |
