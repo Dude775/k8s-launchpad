@@ -118,7 +118,14 @@ kubectl ${KCTX} run registry-verify \
   -- echo "registry-ok"
 
 # One-shot pods never become Ready/Completed conditions — wait on phase instead.
-kubectl ${KCTX} wait --for=jsonpath='{.status.phase}'=Succeeded pod/registry-verify --timeout=60s
+# On timeout (e.g. ImagePullBackOff), surface the pod events so the actual
+# cause is visible, clean up the pod, and fail explicitly.
+if ! kubectl ${KCTX} wait --for=jsonpath='{.status.phase}'=Succeeded pod/registry-verify --timeout=60s; then
+  echo "ERROR: registry verification failed — pod status:"
+  kubectl ${KCTX} describe pod registry-verify | sed -n '/Events:/,$p'
+  kubectl ${KCTX} delete pod registry-verify --ignore-not-found
+  exit 1
+fi
 kubectl ${KCTX} delete pod registry-verify --ignore-not-found
 
 echo "==> Registry wiring verified OK"
