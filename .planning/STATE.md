@@ -71,6 +71,7 @@ None yet.
 
 ### Blockers/Concerns
 
+- **CHECKPOINT (Phase 02, plan 02-02):** Live cluster verification blocked — `kind` not installed on host (Docker 29.5.3 present). User paused execution 2026-07-05. To resume: install kind (`winget install Kubernetes.kind` or binary v0.32.0 from https://kind.sigs.k8s.io/dl/v0.32.0/), reopen shell, then run `/gsd-execute-phase 2`. Verification sequence: `make cluster-up` ×2 (idempotency), `make cluster-down` ×2, `make test`. Plan 02-01 is complete and merged; only 02-02 remains.
 - Research flag (Phase 2): Verify registry wiring with a test image pull from within the cluster before proceeding to Phase 3
 - Research flag (Phase 3): Test MongoDB auth connection string with `?authSource=admin` explicitly
 - Research flag (Phase 3): Verify mongomock supports PyMongo 4.13.x API; fall back to monkeypatch if incompatible
