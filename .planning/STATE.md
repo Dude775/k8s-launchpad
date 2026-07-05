@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Session resumed, proceeding to plan Phase 2 (research re-run + PLAN.md)
-last_updated: "2026-07-05T07:55:33.073Z"
+stopped_at: Session resumed; kind v0.32.0 now installed — checkpoint blocker cleared; proceeding to execute Phase 2 (plan 02-02 live verification)
+last_updated: "2026-07-05T08:36:23.215Z"
 last_activity: 2026-07-05 -- Phase 02 execution started
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
   percent: 25
 ---
 
@@ -71,7 +71,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- **CHECKPOINT (Phase 02, plan 02-02):** Live cluster verification blocked — `kind` not installed on host (Docker 29.5.3 present). User paused execution 2026-07-05. To resume: install kind (`winget install Kubernetes.kind` or binary v0.32.0 from https://kind.sigs.k8s.io/dl/v0.32.0/), reopen shell, then run `/gsd-execute-phase 2`. Verification sequence: `make cluster-up` ×2 (idempotency), `make cluster-down` ×2, `make test`. Plan 02-01 is complete and merged; only 02-02 remains.
+- **CHECKPOINT (Phase 02, plan 02-02):** Live verification blocked — Docker daemon deadlock cascaded into WSL2 service crash (`Wsl/0x80070422`) during the 2026-07-05 execution attempt. Root cause: executor ran concurrent docker diagnostic commands during `make cluster-up` (scripts themselves are correct — reviewed pre-crash). kind v0.32.0 IS installed. To resume: restart the computer (or elevated PowerShell: `Restart-Service WslService -Force`, then start Docker Desktop), confirm `docker ps` works, then run `/gsd-execute-phase 2`. Full context + blocking anti-patterns: `.planning/phases/02-cluster-infrastructure/.continue-here.md`. Plan 02-01 complete; only 02-02 remains.
 - Research flag (Phase 2): Verify registry wiring with a test image pull from within the cluster before proceeding to Phase 3
 - Research flag (Phase 3): Test MongoDB auth connection string with `?authSource=admin` explicitly
 - Research flag (Phase 3): Verify mongomock supports PyMongo 4.13.x API; fall back to monkeypatch if incompatible
@@ -88,5 +88,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-07-05 (resumed)
-Stopped at: Session resumed, proceeding to plan Phase 2 (research re-run + PLAN.md)
-Resume file: None
+Stopped at: Plan 02-02 execution attempt crashed Docker/WSL2 (Wsl/0x80070422) — human-action checkpoint: restart machine or WslService, then /gsd-execute-phase 2
+Resume file: .planning/phases/02-cluster-infrastructure/.continue-here.md
