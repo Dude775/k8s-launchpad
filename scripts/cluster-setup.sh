@@ -30,13 +30,20 @@ command -v kind >/dev/null 2>&1 || {
 # ── Step 1: Registry ─────────────────────────────────────────────────────────
 echo "==> Step 1: Ensuring local registry is running..."
 if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)" != 'true' ]; then
-  docker run \
-    -d --restart=always \
-    -p "127.0.0.1:${reg_port}:5000" \
-    --network bridge \
-    --name "${reg_name}" \
-    registry:3
-  echo "    Registry started."
+  if docker inspect "${reg_name}" >/dev/null 2>&1; then
+    # Container exists but is stopped — `docker run` would fail on the name
+    # conflict and errexit would abort the whole setup. Start it instead.
+    docker start "${reg_name}"
+    echo "    Existing registry container started."
+  else
+    docker run \
+      -d --restart=always \
+      -p "127.0.0.1:${reg_port}:5000" \
+      --network bridge \
+      --name "${reg_name}" \
+      registry:3
+    echo "    Registry started."
+  fi
 else
   echo "    Registry already running — skipping."
 fi
