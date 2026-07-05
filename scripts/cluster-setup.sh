@@ -86,13 +86,16 @@ docker pull alpine:3.20 --quiet
 docker tag alpine:3.20 localhost:${reg_port}/verify:v1
 docker push localhost:${reg_port}/verify:v1
 
+kubectl delete pod registry-verify --ignore-not-found
+
 kubectl run registry-verify \
   --image=localhost:${reg_port}/verify:v1 \
   --restart=Never \
   --image-pull-policy=Always \
   -- echo "registry-ok"
 
-kubectl wait --for=condition=Completed pod/registry-verify --timeout=60s
+# One-shot pods never become Ready/Completed conditions — wait on phase instead.
+kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/registry-verify --timeout=60s
 kubectl delete pod registry-verify --ignore-not-found
 
 echo "==> Registry wiring verified OK"
