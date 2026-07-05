@@ -18,14 +18,14 @@ k8s-launchpad is a self-hosted Internal Developer Platform (IDP) — a "mini-Her
 - [x] `/health` endpoint returns 200; `/metrics` exposes basic Prometheus-format metrics — Validated in Phase 1
 - [x] Unit tests for API endpoints (pytest), passing via `make test` — Validated in Phase 1 (32 tests, 100% coverage, venv-based test target)
 - [x] .gitignore covering .env, __pycache__, .venv, *.pyc, kubeconfig — in place BEFORE first meaningful commit — Validated in Phase 1 (first commit)
+- [x] kind cluster config + script/Makefile target to spin it up with a local registry — Validated in Phase 2: live-verified end-to-end (clean-machine cluster-up, in-pod registry pull, idempotent re-run, double-safe teardown)
 
 ### Active
 
 - [ ] Dockerfile producing a small, working image
-- [ ] kind cluster config + script/Makefile target to spin it up with a local registry
 - [ ] Helm chart deploying the app (Deployment, Service, ConfigMap, Secret template, values.yaml); app reachable locally
 - [ ] MongoDB running in-cluster (Helm dependency or simple manifest)
-- [ ] Makefile targets: cluster-up, cluster-down, build, load, deploy, test, clean — working under WSL2 / Git Bash (test target done in Phase 1)
+- [ ] Makefile targets: cluster-up, cluster-down, build, load, deploy, test, clean — working under WSL2 / Git Bash (test done in Phase 1; cluster-up/cluster-down done in Phase 2)
 - [ ] README documenting end-to-end local setup (clone → make cluster-up → make deploy → curl)
 
 ### Out of Scope
@@ -85,7 +85,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ## Current State
 
-Phase 1 complete (2026-07-05) — monorepo scaffold, working Flask field-guide API (app factory, Flask-PyMongo, /health with 2s Mongo timeout, /metrics), and a 32-test pytest suite at 100% coverage running via venv-based `make test`. Code review done: 2 Critical + 5 Warning findings all fixed. Next: Phase 2 — kind cluster + local registry.
+Phase 2 complete (2026-07-05) — idempotent kind cluster + registry:3 lifecycle live-verified end-to-end: `make cluster-up` self-verifies a host-push → in-pod-pull through the containerd hosts.toml mirror, re-runs cleanly, and `make cluster-down` tears down safely twice. A false-timeout in the verify-pod wait was fixed mid-verification (19642df). Code review: 1 Critical (kubectl context pinning) + 3 Warnings open — fix via `/gsd-code-review 2 --fix` before Phase 3 makes re-runs routine. Next: Phase 3 — containerization + Helm deployment.
 
 ---
-*Last updated: 2026-07-05 after Phase 1 completion*
+*Last updated: 2026-07-05 after Phase 2 completion*
