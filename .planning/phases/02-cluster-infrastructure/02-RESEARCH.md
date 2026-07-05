@@ -548,9 +548,10 @@ the `docker run` command — never change it to `0.0.0.0`.
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Cluster name: "kind" (default) vs "k8s-launchpad"?**
+   - RESOLVED: use default `kind` (per recommendation below; plans implement this)
    - What we know: Default name is `kind`; no name is specified in CLAUDE.md; using default avoids
      passing `--name` to every subsequent kind command
    - What's unclear: Whether the project wants a named cluster for multi-cluster environments
@@ -558,6 +559,7 @@ the `docker run` command — never change it to `0.0.0.0`.
      The planner can decide without blocking research.
 
 2. **Verification step: inline in cluster-setup.sh or separate Makefile target?**
+   - RESOLVED: inline as the final blocking step of cluster-setup.sh (plans implement this)
    - What we know: STATE.md research flag says "verify registry wiring with a test image pull from
      within the cluster before proceeding to Phase 3"
    - What's unclear: Whether verification should be mandatory (blocking cluster-up) or optional
@@ -565,6 +567,7 @@ the `docker run` command — never change it to `0.0.0.0`.
      self-verifying; a failed verification exits non-zero and prevents Phase 3.
 
 3. **kind installation automation vs manual prerequisite**
+   - RESOLVED: prerequisite-check gate in cluster-setup.sh with install instructions; no auto-install (plans implement this)
    - What we know: kind is not installed; winget is available; Makefile cannot reliably run winget
      in headless CI context; kind install is a one-time developer action
    - Recommendation: Add prerequisite-check at top of cluster-setup.sh that exits with a clear
