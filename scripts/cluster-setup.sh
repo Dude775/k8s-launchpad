@@ -14,6 +14,10 @@ export MSYS_NO_PATHCONV=1   # suppress Git Bash POSIX-to-Windows path mangling
 
 reg_name='kind-registry'
 reg_port='5001'
+# Pin every kubectl call to the kind cluster's context so an idempotent
+# re-run (cluster already exists, no context switch) can never mutate
+# whatever cluster the user's kubeconfig currently points at.
+KCTX='--context=kind-kind'
 
 # ── Prerequisite gate ────────────────────────────────────────────────────────
 command -v kind >/dev/null 2>&1 || {
@@ -68,7 +72,7 @@ fi
 
 # ── Step 5: Discovery ConfigMap (KEP-1755) ───────────────────────────────────
 echo "==> Step 5: Applying local-registry-hosting ConfigMap..."
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl ${KCTX} apply -f -
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -86,17 +90,17 @@ docker pull alpine:3.20 --quiet
 docker tag alpine:3.20 localhost:${reg_port}/verify:v1
 docker push localhost:${reg_port}/verify:v1
 
-kubectl delete pod registry-verify --ignore-not-found
+kubectl ${KCTX} delete pod registry-verify --ignore-not-found
 
-kubectl run registry-verify \
+kubectl ${KCTX} run registry-verify \
   --image=localhost:${reg_port}/verify:v1 \
   --restart=Never \
   --image-pull-policy=Always \
   -- echo "registry-ok"
 
 # One-shot pods never become Ready/Completed conditions — wait on phase instead.
-kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/registry-verify --timeout=60s
-kubectl delete pod registry-verify --ignore-not-found
+kubectl ${KCTX} wait --for=jsonpath='{.status.phase}'=Succeeded pod/registry-verify --timeout=60s
+kubectl ${KCTX} delete pod registry-verify --ignore-not-found
 
 echo "==> Registry wiring verified OK"
 echo "==> cluster-setup complete — cluster is ready."
