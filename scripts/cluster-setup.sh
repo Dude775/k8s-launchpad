@@ -26,6 +26,18 @@ command -v kind >/dev/null 2>&1 || {
   echo "Or download from: https://kind.sigs.k8s.io/dl/v0.32.0/kind-windows-amd64.exe"
   exit 1
 }
+# docker and kubectl are equally hard dependencies — fail fast before any
+# work happens rather than dying mid-run with a half-created cluster.
+for tool in docker kubectl; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "ERROR: $tool is not installed or not on PATH."
+    exit 1
+  }
+done
+docker info >/dev/null 2>&1 || {
+  echo "ERROR: Docker daemon is not running."
+  exit 1
+}
 
 # ── Step 1: Registry ─────────────────────────────────────────────────────────
 echo "==> Step 1: Ensuring local registry is running..."
