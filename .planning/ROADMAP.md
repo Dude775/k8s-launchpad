@@ -81,7 +81,20 @@ Plans:
   4. MongoDB is running as plain `mongo:7` manifests embedded inside the chart templates; `helm uninstall` removes all resources cleanly
   5. `values.yaml` is generic (image.*, service.*, resources, secrets, metrics.enabled, imagePullPolicy) and structured so PRD-3 can template new apps from it
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Container image: multi-stage python:3.11-slim Dockerfile (non-root UID 10001, gunicorn CMD) + load-bearing .dockerignore
+- [ ] 03-02-PLAN.md — Helm chart: Chart.yaml/values.yaml/_helpers + app Deployment/Service/ConfigMap/Secret + plain mongo:7 Deployment/Service/PVC/Secret (helm lint passes)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-03-PLAN.md — Makefile build/load/deploy/undeploy targets wrapping the verified registry + Helm loop (no --atomic)
+
+**Wave 3** *(blocked on Wave 2; blocking human-verify — live cluster run)*
+
+- [ ] 03-04-PLAN.md — Live end-to-end verification: cluster-up → build → load → helm lint → deploy → port-forward smoke test (/health, /entries, /metrics) → clean uninstall
 
 ### Phase 4: Makefile + Documentation
 
@@ -105,5 +118,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Scaffold + App + Tests | 3/3 | Complete   | 2026-07-04 |
 | 2. Cluster Infrastructure | 2/2 | Complete   | 2026-07-05 |
-| 3. Containerization + Helm Deployment | 0/TBD | Not started | - |
+| 3. Containerization + Helm Deployment | 0/4 | Not started | - |
 | 4. Makefile + Documentation | 0/TBD | Not started | - |
