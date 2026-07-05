@@ -58,7 +58,15 @@ Plans:
   2. A test image pushed to `localhost:5001` is pullable from within a cluster pod — containerd mirror and network wiring verified end-to-end
   3. `make cluster-down` tears down the cluster and registry cleanly and can be re-run multiple times without side effects
 
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Author kind cluster config + cluster-setup.sh (six-step registry wiring + verify) + cluster-teardown.sh + Makefile cluster-up/cluster-down targets
+
+**Wave 2** *(blocked on Wave 1; human gate — kind install)*
+
+- [ ] 02-02-PLAN.md — End-to-end lifecycle verification: cluster-up self-verifies push+pull-from-pod, idempotency, cluster-down safe re-run
 
 ### Phase 3: Containerization + Helm Deployment
 
@@ -96,6 +104,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scaffold + App + Tests | 3/3 | Complete   | 2026-07-04 |
-| 2. Cluster Infrastructure | 0/TBD | Not started | - |
+| 2. Cluster Infrastructure | 0/2 | Planned | - |
 | 3. Containerization + Helm Deployment | 0/TBD | Not started | - |
 | 4. Makefile + Documentation | 0/TBD | Not started | - |
