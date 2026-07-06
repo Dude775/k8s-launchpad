@@ -67,6 +67,9 @@ spec:
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 5
+            # > the 2s serverSelectionTimeoutMS in MONGO_URI (secret.yaml), so /health can
+            # return its designed 503 instead of the probe timing out at the 1s default.
+            timeoutSeconds: 3
           livenessProbe:
             tcpSocket:
               port: 8000
