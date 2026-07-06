@@ -22,12 +22,17 @@ spec:
       labels:
         {{- include "field-guide-api.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: api
-      {{- if .Values.metrics.enabled }}
       annotations:
+        # checksum/* forces a rolling restart on `helm upgrade` when the ConfigMap/Secret
+        # content changes — env vars are read once at container start, so without this a
+        # config change updates the objects but leaves running pods on stale values.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- if .Values.metrics.enabled }}
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"
         prometheus.io/port: "8000"
-      {{- end }}
+        {{- end }}
     spec:
       securityContext:
         runAsNonRoot: true
