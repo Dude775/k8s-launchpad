@@ -41,8 +41,12 @@ load:
 	docker push $(IMAGE):$(TAG)
 
 ## deploy: install or upgrade the Helm release (idempotent; helm upgrade --install)
+## IMAGE/TAG are forwarded to the chart so build/load/deploy stay coordinated:
+##   make build TAG=v1.0 && make load TAG=v1.0 && make deploy TAG=v1.0
 deploy:
-	helm upgrade --install $(RELEASE) $(CHART) --wait --timeout 180s
+	helm upgrade --install $(RELEASE) $(CHART) \
+		--set image.repository=$(IMAGE) --set image.tag=$(TAG) \
+		--wait --timeout 180s
 
 ## undeploy: remove the Helm release and all chart-owned resources
 undeploy:
