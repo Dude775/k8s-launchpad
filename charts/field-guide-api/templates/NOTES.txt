@@ -1,0 +1,15 @@
+field-guide-api deployed successfully.
+
+Usage:
+  Forward the service to your local machine:
+    kubectl port-forward svc/{{ include "field-guide-api.fullname" . }} 8080:{{ .Values.service.port }}
+
+  Then in another terminal, smoke-test the endpoints:
+    curl http://localhost:8080/health        # expect {"status":"ok","mongo":"up"}
+    curl http://localhost:8080/entries       # expect [] or a list of knowledge entries
+    curl http://localhost:8080/metrics       # expect Prometheus-format metrics
+
+  Press Ctrl-C in the port-forward terminal to stop.
+
+  To remove all chart resources (including the MongoDB PVC):
+    helm uninstall {{ .Release.Name }}

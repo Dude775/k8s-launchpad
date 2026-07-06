@@ -1,0 +1,11 @@
+# charts/field-guide-api/Chart.yaml
+# Helm 3-compatible chart (apiVersion v2) for the field-guide Flask API + embedded MongoDB.
+# Installed CLI: Helm 4.2.1 — apiVersion v2 is fully supported unchanged.
+apiVersion: v2
+name: field-guide-api
+description: >-
+  Deploys the field-guide Flask REST API (gunicorn + MongoDB in-cluster).
+  Part of k8s-launchpad PRD-1 — the local build-to-deploy loop.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
