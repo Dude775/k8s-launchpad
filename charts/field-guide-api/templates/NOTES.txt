@@ -1,4 +1,10 @@
 field-guide-api deployed successfully.
+{{- if and .Values.mongodb.enabled (eq .Values.mongodb.auth.password "fieldguide-dev-password") }}
+
+  !! WARNING: MongoDB is running with the COMMITTED local-dev password.
+  !! This is acceptable ONLY on a local kind cluster. For anything real:
+  !!   helm upgrade {{ .Release.Name }} <chart> --set mongodb.auth.password=<real-password>
+{{- end }}
 
 Usage:
   Forward the service to your local machine:
