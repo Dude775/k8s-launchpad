@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Scaffold + App + Tests** - Monorepo layout, Flask field-guide API, and passing test suite — all runnable without a cluster (completed 2026-07-04)
 - [x] **Phase 2: Cluster Infrastructure** - Idempotent kind cluster with wired local registry (completed 2026-07-05)
-- [ ] **Phase 3: Containerization + Helm Deployment** - App running in-cluster, reachable locally, backed by in-cluster MongoDB
+- [x] **Phase 3: Containerization + Helm Deployment** - App running in-cluster, reachable locally, backed by in-cluster MongoDB (completed 2026-07-06)
 - [ ] **Phase 4: Makefile + Documentation** - Full developer loop wired end-to-end; project is self-documenting
 
 ## Phase Details
@@ -94,7 +94,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2; blocking human-verify — live cluster run)*
 
-- [ ] 03-04-PLAN.md — Live end-to-end verification: cluster-up → build → load → helm lint → deploy → port-forward smoke test (/health, /entries, /metrics) → clean uninstall
+- [x] 03-04-PLAN.md — Live end-to-end verification: cluster-up → build → load → helm lint → deploy → port-forward smoke test (/health, /entries, /metrics) → clean uninstall
 
 ### Phase 4: Makefile + Documentation
 
@@ -118,5 +118,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Scaffold + App + Tests | 3/3 | Complete   | 2026-07-04 |
 | 2. Cluster Infrastructure | 2/2 | Complete   | 2026-07-05 |
-| 3. Containerization + Helm Deployment | 3/4 | In Progress|  |
+| 3. Containerization + Helm Deployment | 4/4 | Complete   | 2026-07-06 |
 | 4. Makefile + Documentation | 0/TBD | Not started | - |
