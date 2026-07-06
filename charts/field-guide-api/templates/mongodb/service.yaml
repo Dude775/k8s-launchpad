@@ -18,7 +18,5 @@ spec:
       protocol: TCP
       name: mongodb
   selector:
-    app.kubernetes.io/name: {{ include "field-guide-api.name" . }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: mongodb
+    {{- include "field-guide-api.mongodb.selectorLabels" . | nindent 4 }}
 {{- end }}

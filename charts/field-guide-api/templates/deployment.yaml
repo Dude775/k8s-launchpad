@@ -21,6 +21,7 @@ spec:
     metadata:
       labels:
         {{- include "field-guide-api.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
       {{- if .Values.metrics.enabled }}
       annotations:
         prometheus.io/scrape: "true"

@@ -70,3 +70,18 @@ These are immutable once a Deployment is created; do not add mutable fields here
 app.kubernetes.io/name: {{ include "field-guide-api.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+MongoDB selector labels — DISTINCT identity from the app selectorLabels.
+Kubernetes label selectors are subset matches: if the mongodb pod carried the
+app's name/instance labels, the app Service would route traffic to mongod
+(connection refused on port 8000). A distinct app.kubernetes.io/name keeps the
+app Service Endpoints scoped to API pods only.
+SINGLE source of truth for mongodb pod identity — used by:
+  - templates/mongodb/deployment.yaml (spec.selector.matchLabels + pod template labels)
+  - templates/mongodb/service.yaml    (spec.selector)
+*/}}
+{{- define "field-guide-api.mongodb.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "field-guide-api.name" . }}-mongodb
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
