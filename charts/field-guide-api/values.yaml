@@ -1,0 +1,54 @@
+# charts/field-guide-api/values.yaml
+# Generic values schema — the PRD-3 templating seam (HELM-04).
+# LOCAL DEV DEFAULTS ONLY — override sensitive values with --set or -f for anything real.
+# Discipline mirror: apps/field-guide-api/.env.example
+# Source: HELM-04 requirement schema + standard Helm conventions (RESEARCH.md Pattern 3)
+
+replicaCount: 1
+
+image:
+  repository: localhost:5001/field-guide-api
+  tag: dev
+  # IfNotPresent is locked by HELM-04 — never change this default.
+  # To pick up a rebuilt image with the same tag, use: kubectl rollout restart deploy/<name>
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+metrics:
+  enabled: true  # PRD-4 scrape seam — enables Prometheus annotations on the pod template
+
+config:
+  mongoDbName: fieldguide
+  # empty = disabled; _env_flag in app/config.py treats empty string as False.
+  # MUST stay empty (or unset) in containers and Kubernetes deployments.
+  flaskDebug: ""
+
+# MongoDB in-cluster — plain mongo:7 manifests embedded in the chart (NOT Bitnami).
+# Bitnami mongodb chart is behind Broadcom paywall since Sep 2025 — use these plain manifests.
+# PRD-3: DB-less apps set mongodb.enabled: false and supply an external MONGO_URI via --set.
+mongodb:
+  enabled: true
+  image: mongo:7
+  auth:
+    username: root
+    # local kind only; never a real credential — override with --set mongodb.auth.password=<real> for anything real.
+    password: fieldguide-dev-password
+    database: fieldguide
+  persistence:
+    enabled: true
+    size: 1Gi
+    # empty = cluster default ("standard" on kind, local-path provisioner, WaitForFirstConsumer).
+    # PVC is chart-owned (Deployment-bound, NOT StatefulSet) so helm uninstall removes it cleanly.
+    storageClass: ""

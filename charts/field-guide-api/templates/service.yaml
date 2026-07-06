@@ -1,0 +1,19 @@
+# charts/field-guide-api/templates/service.yaml
+# ClusterIP Service for the field-guide Flask API.
+# Exposed only inside the cluster; access via kubectl port-forward (see NOTES.txt).
+# NodePort excluded: requires kind extraPortMappings -> cluster re-create (RESEARCH.md Open Question 1).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "field-guide-api.fullname" . }}
+  labels:
+    {{- include "field-guide-api.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "field-guide-api.selectorLabels" . | nindent 4 }}

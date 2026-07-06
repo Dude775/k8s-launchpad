@@ -1,0 +1,65 @@
+{{- if .Values.mongodb.enabled }}
+# charts/field-guide-api/templates/mongodb/deployment.yaml
+# Plain Deployment for MongoDB — NOT a StatefulSet.
+# StatefulSet volumeClaimTemplates are NOT deleted by helm uninstall; a plain Deployment +
+# chart-owned PVC (pvc.yaml) is deleted cleanly (RESEARCH.md Alternatives Considered).
+# mongo:7 is a Docker official library image (Package Legitimacy Audit: Approved).
+# Readiness probe: mongosh ping requires NO auth even with --auth enabled (live-verified).
+# MONGO_INITDB_ROOT_* bootstraps the root user in admin on first PVC init only (Pitfall 4).
+# Source: RESEARCH.md HELM-03, Pattern 5, Pitfalls 4 + 9
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "field-guide-api.mongodb.fullname" . }}
+  labels:
+    {{- include "field-guide-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "field-guide-api.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "field-guide-api.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: {{ .Values.mongodb.image | quote }}
+          ports:
+            - name: mongodb
+              containerPort: 27017
+              protocol: TCP
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "field-guide-api.mongodb.fullname" . }}
+                  key: MONGO_INITDB_ROOT_USERNAME
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "field-guide-api.mongodb.fullname" . }}
+                  key: MONGO_INITDB_ROOT_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "field-guide-api.mongodb.fullname" . }}
+{{- end }}

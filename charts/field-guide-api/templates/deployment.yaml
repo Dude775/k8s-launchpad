@@ -1,0 +1,72 @@
+# charts/field-guide-api/templates/deployment.yaml
+# Kubernetes Deployment for the field-guide Flask API (gunicorn, port 8000).
+# Probe strategy (RESEARCH.md Pattern 5):
+#   readinessProbe: httpGet /health — gates traffic; returns 503 when Mongo is down
+#   livenessProbe:  tcpSocket 8000  — "is gunicorn accepting connections" ONLY
+#   /health is intentionally NOT the liveness target: it would restart healthy pods during Mongo outages
+# securityContext: runAsNonRoot + runAsUser 10001 matches Dockerfile USER 10001 (numeric UID required for kubelet verification)
+# Source: RESEARCH.md Code Examples + Pattern 5
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "field-guide-api.fullname" . }}
+  labels:
+    {{- include "field-guide-api.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "field-guide-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "field-guide-api.selectorLabels" . | nindent 8 }}
+      {{- if .Values.metrics.enabled }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+      {{- end }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: field-guide-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "field-guide-api.fullname" . }}
+                  key: MONGO_URI
+            - name: MONGO_DBNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "field-guide-api.fullname" . }}
+                  key: MONGO_DBNAME
+            - name: FLASK_DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "field-guide-api.fullname" . }}
+                  key: FLASK_DEBUG
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false

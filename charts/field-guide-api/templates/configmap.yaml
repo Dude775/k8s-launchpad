@@ -1,0 +1,14 @@
+# charts/field-guide-api/templates/configmap.yaml
+# Non-secret configuration injected into the app container as environment variables.
+# MONGO_URI (contains password) is intentionally absent — it lives in secret.yaml only.
+# Source: RESEARCH.md Code Examples; analog: scripts/cluster-setup.sh lines 94-104
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "field-guide-api.fullname" . }}
+  labels:
+    {{- include "field-guide-api.labels" . | nindent 4 }}
+data:
+  MONGO_DBNAME: {{ .Values.config.mongoDbName | quote }}
+  # empty string disables Flask debug mode; _env_flag in app/config.py treats "" as False
+  FLASK_DEBUG: {{ .Values.config.flaskDebug | quote }}
