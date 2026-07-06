@@ -1,0 +1,19 @@
+# .dockerignore — Excludes Windows venv, caches, test artifacts, and secrets from the
+# Docker build context. Without this file, .venv/ (100MB+ Windows binaries) would be
+# transferred to the Docker daemon on every build.
+
+# Virtual environments (Windows venv with .pyd binaries must never enter the Linux image)
+.venv/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+tests/
+
+# Python bytecode caches
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Secrets and local config
+.env
