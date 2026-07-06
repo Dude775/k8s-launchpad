@@ -35,9 +35,15 @@ config:
   # MUST stay empty (or unset) in containers and Kubernetes deployments.
   flaskDebug: ""
 
+# External MongoDB connection string — consumed ONLY when mongodb.enabled=false.
+# PRD-3 seam: apps that bring their own DB disable the in-chart mongodb and set this
+# to a full mongodb:// URI via --set or -f. The chart fails fast at render time if
+# mongodb.enabled=false and this is empty. NEVER commit a real URI here.
+externalMongoUri: ""
+
 # MongoDB in-cluster — plain mongo:7 manifests embedded in the chart (NOT Bitnami).
 # Bitnami mongodb chart is behind Broadcom paywall since Sep 2025 — use these plain manifests.
-# PRD-3: DB-less apps set mongodb.enabled: false and supply an external MONGO_URI via --set.
+# PRD-3: DB-less apps set mongodb.enabled=false and supply --set externalMongoUri=mongodb://...
 mongodb:
   enabled: true
   image: mongo:7
