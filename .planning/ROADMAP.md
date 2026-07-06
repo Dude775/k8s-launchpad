@@ -90,7 +90,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-03-PLAN.md — Makefile build/load/deploy/undeploy targets wrapping the verified registry + Helm loop (no --atomic)
+- [x] 03-03-PLAN.md — Makefile build/load/deploy/undeploy targets wrapping the verified registry + Helm loop (no --atomic)
 
 **Wave 3** *(blocked on Wave 2; blocking human-verify — live cluster run)*
 
@@ -118,5 +118,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Scaffold + App + Tests | 3/3 | Complete   | 2026-07-04 |
 | 2. Cluster Infrastructure | 2/2 | Complete   | 2026-07-05 |
-| 3. Containerization + Helm Deployment | 2/4 | In Progress|  |
+| 3. Containerization + Helm Deployment | 3/4 | In Progress|  |
 | 4. Makefile + Documentation | 0/TBD | Not started | - |
