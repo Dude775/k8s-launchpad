@@ -16,6 +16,12 @@ metadata:
     app.kubernetes.io/component: mongodb
 spec:
   replicas: 1
+  # Recreate (NOT the RollingUpdate default): a single mongod bound to a RWO PVC must be
+  # stopped before its replacement starts. RollingUpdate surges a second mongod against the
+  # same /data/db (RWO is node-scoped on single-node kind) — it crash-loops on mongod.lock
+  # and `helm upgrade --wait` deadlocks; two mongods on one data dir is a corruption hazard.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "field-guide-api.mongodb.selectorLabels" . | nindent 6 }}
