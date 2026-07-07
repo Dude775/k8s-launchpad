@@ -552,14 +552,14 @@ This is intentional for a local kind cluster — `helm install` will warn you at
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`make up` help line with prerequisites**
+1. **`make up` help line with prerequisites** — RESOLVED: Plan 04-01 Task 3 acceptance criteria cover live verification that the `up` line renders correctly in `make help`; fallback is the separate-`##`-comment pattern.
    - What we know: `up: cluster-up build load deploy  ## description` — awk processes this; greedy `.*` in `FS = ":.*##"` should capture the longest match before `##`, giving correct $$1=`up` output
    - What's unclear: Awk field separator with greedy regex on a line with multiple colons — needs live verification before planner locks the pattern
    - Recommendation: Planner should include a task to test `make help` output after the `up` target is added; fallback is to put description on a separate `##` comment line above `up:`
 
-2. **gunicorn `/home/app` permission warning in startup logs**
+2. **gunicorn `/home/app` permission warning in startup logs** — RESOLVED: Documented as a known limitation in `docs/known-limitations.md` (Plan 04-02 Task 2); no Dockerfile change in Phase 4.
    - What we know: Phase 3 verification noted this as "cosmetic, harmless — gunicorn served traffic throughout" (03-VERIFICATION.md human verification note)
    - What's unclear: Whether to address it in Phase 4 (easy fix: `HOME=/tmp` or `--worker-tmp-dir /tmp` in gunicorn CMD) or document as known limitation
    - Recommendation: Document as known limitation in `docs/known-limitations.md` with the fix option; Phase 4 scope is Makefile + docs, not Dockerfile edits
