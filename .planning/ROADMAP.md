@@ -111,7 +111,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Makefile: convert to inline `## description` help convention + `help` default goal + DX targets (up, check-tools, port-forward, smoke, clean, clean-venv, reset-local) [MAKE-01, MAKE-02]
+- [x] 04-01-PLAN.md — Makefile: convert to inline `## description` help convention + `help` default goal + DX targets (up, check-tools, port-forward, smoke, clean, clean-venv, reset-local) [MAKE-01, MAKE-02]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Scaffold + App + Tests | 3/3 | Complete   | 2026-07-04 |
 | 2. Cluster Infrastructure | 2/2 | Complete   | 2026-07-05 |
 | 3. Containerization + Helm Deployment | 4/4 | Complete   | 2026-07-06 |
-| 4. Makefile + Documentation | 0/3 | Not started | - |
+| 4. Makefile + Documentation | 1/3 | In Progress|  |
