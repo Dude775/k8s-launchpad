@@ -4,7 +4,7 @@
 
 k8s-launchpad is a self-hosted Internal Developer Platform (IDP) — a "mini-Heroku" running on a local Kubernetes cluster. A developer registers a Git repo through a web dashboard; the platform automatically builds it (Docker), deploys it (Helm), syncs it via GitOps (ArgoCD), monitors it (Prometheus/Grafana/Loki), and scans it for vulnerabilities (Trivy), with a self-diagnostics engine that health-checks the platform's own components. Built as a portfolio piece to demonstrate platform-engineering-level thinking.
 
-**This milestone (PRD-1) covers ONLY the foundation:** monorepo, a sample "field-guide" Flask API (the platform's dogfood app), containerization, a local kind cluster with local registry, and Helm deployment. Everything runs locally and free.
+**PRD-1 (foundation) shipped as v1.0 on 2026-07-07:** monorepo, a sample "field-guide" Flask API (the platform's dogfood app), containerization, a local kind cluster with local registry, and Helm deployment — everything local and free. Next up: PRD-2 (GitOps/ArgoCD).
 
 ## Core Value
 
@@ -23,10 +23,12 @@ k8s-launchpad is a self-hosted Internal Developer Platform (IDP) — a "mini-Her
 - [x] Helm chart deploying the app (Deployment, Service, ConfigMap, Secret template, values.yaml); app reachable locally — Validated in Phase 3: helm lint clean, port-forward + curl 200 on /health, /entries, /metrics; code review Critical (service selector overlap) found and fixed
 - [x] MongoDB running in-cluster (Helm dependency or simple manifest) — Validated in Phase 3: plain mongo:7 manifests embedded in chart, clean uninstall incl. PVC
 
+- [x] Makefile developer CLI: cluster-up, cluster-down, build, load, deploy, test, clean + up/smoke/check-tools/port-forward, self-documenting `make help` — Validated in Phase 4 (v1.0): full loop + smoke live-verified in Git Bash, human-approved (WSL2 N/A on this machine)
+- [x] README documenting end-to-end local setup (clone → make up → curl) — Validated in Phase 4 (v1.0): portfolio-grade README with Mermaid architecture, real captured output, plus docs/ troubleshooting, windows-setup, and known-limitations pages
+
 ### Active
 
-- [ ] Makefile targets: cluster-up, cluster-down, build, load, deploy, test, clean — working under WSL2 / Git Bash (test done in Phase 1; cluster-up/cluster-down done in Phase 2; build/load/deploy/undeploy done in Phase 3 — clean target remains for Phase 4)
-- [ ] README documenting end-to-end local setup (clone → make cluster-up → make deploy → curl)
+(None — v1.0 shipped. Next milestone requirements defined via /gsd-new-milestone.)
 
 ### Out of Scope
 
@@ -59,12 +61,16 @@ k8s-launchpad is a self-hosted Internal Developer Platform (IDP) — a "mini-Her
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Flask + Python 3.11 for sample app | Locked in PRD; matches developer's primary stack | — Pending |
-| MongoDB in-cluster | Locked in PRD; exercises Helm dependency/stateful workload | — Pending |
-| kind for local cluster | Locked in PRD; free, disposable, CI-friendly | — Pending |
-| Helm 3 packaging | Locked in PRD; values.yaml becomes template seam for PRD-3 | — Pending |
-| Sample app = field-guide content API | Dogfood app that doubles as DevOps knowledge base content | — Pending |
-| Horizontal Layers project mode | Infrastructure-heavy foundation PRD; layers (app → image → cluster → chart) map naturally to phases | — Pending |
+| Flask + Python 3.11 for sample app | Locked in PRD; matches developer's primary stack | ✓ Good — 32 tests, 100% coverage, clean app factory |
+| MongoDB in-cluster | Locked in PRD; exercises Helm dependency/stateful workload | ✓ Good — plain mongo:7 manifests, clean uninstall incl. PVC |
+| kind for local cluster | Locked in PRD; free, disposable, CI-friendly | ✓ Good — survived Docker Desktop restart; idempotent re-runs |
+| Helm 3 packaging | Locked in PRD; values.yaml becomes template seam for PRD-3 | ✓ Good — lint clean; generic values.yaml seam in place |
+| Sample app = field-guide content API | Dogfood app that doubles as DevOps knowledge base content | ✓ Good |
+| Horizontal Layers project mode | Infrastructure-heavy foundation PRD; layers (app → image → cluster → chart) map naturally to phases | ✓ Good — 4 phases, zero rework across layers |
+| Plain mongo:7 manifests over Bitnami chart | Bitnami paywalled since Sep 2025; operator overkill for single instance | ✓ Good — avoided ImagePullBackOff on fresh clusters |
+| registry:3 + per-node containerd hosts.toml | Canonical kind local-registry pattern; self-verifying push/pull at cluster-up | ✓ Good — wiring re-verified on every cluster-up |
+| gunicorn-only serving (never Flask dev server) | SIGTERM handling for graceful pod termination | ✓ Good — non-root UID 10001, PID 1 exec-form |
+| awk-powered self-documenting Makefile help | 15 targets discoverable via `make help` default goal | ✓ Good — README demo matches real output |
 
 ## Evolution
 
@@ -85,7 +91,13 @@ This document evolves at phase transitions and milestone boundaries.
 
 ## Current State
 
-Phase 2 complete (2026-07-05) — idempotent kind cluster + registry:3 lifecycle live-verified end-to-end: `make cluster-up` self-verifies a host-push → in-pod-pull through the containerd hosts.toml mirror, re-runs cleanly, and `make cluster-down` tears down safely twice. A false-timeout in the verify-pod wait was fixed mid-verification (19642df). Code review: 1 Critical (kubectl context pinning) + 3 Warnings open — fix via `/gsd-code-review 2 --fix` before Phase 3 makes re-runs routine. Next: Phase 3 — containerization + Helm deployment.
+**v1.0 Foundation shipped 2026-07-07.** The full local build-to-deploy loop works end to end: `make up` (cluster-up → build → load → deploy) produces a running Flask field-guide API on kind, backed by in-cluster MongoDB, confirmed by `make smoke` (200 on /health, /entries, /metrics) and human sign-off. Codebase: ~1,360 LOC of app/chart/script source, 32 tests at 100% coverage, 114 commits over 4 days. All PRD-2/3/4 seams in place: `/metrics` endpoint, generic values.yaml, `infra/argocd/` and `infra/observability/` directories.
+
+Known tech debt: README /health example shows compact JSON while Flask emits spaced JSON (cosmetic); MongoDB runs with a committed local-dev password (acceptable for local kind only, warned in NOTES.txt).
+
+## Next Milestone Goals
+
+PRD-2 (GitOps) is the next deferred tranche — ArgoCD syncs deployments from Git (GITOPS-01). Define scope via `/gsd-new-milestone`. Later: PRD-3 platform dashboard, PRD-4 observability/security, final PRD AWS/EKS.
 
 ---
-*Last updated: 2026-07-07 after Phase 3 completion*
+*Last updated: 2026-07-07 after v1.0 milestone*

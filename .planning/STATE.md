@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: milestone_complete
-stopped_at: Phase 4 complete — 04-03 verified live and human-approved (WSL2 N/A); all 12 plans done
-last_updated: "2026-07-07T20:05:00.000Z"
-last_activity: 2026-07-07 -- 04-03 live verification approved; milestone v1.0 complete
+status: Awaiting next milestone
+stopped_at: Milestone v1.0 complete; next action is milestone audit/completion (/gsd-audit-milestone or /gsd-complete-milestone)
+last_updated: "2026-07-07T20:23:29.609Z"
+last_activity: 2026-07-07 — Milestone v1.0 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
@@ -20,17 +20,15 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-07-04)
 
-**Core value:** `make cluster-up && make build && make load && make deploy` produces a running, reachable app on a local kind cluster — the full local build-to-deploy loop works end to end
-**Current focus:** Phase 04 — makefile-documentation
+**Core value:** `make cluster-up && make build && make load && make deploy` produces a running, reachable app on a local kind cluster — the full local build-to-deploy loop works end to end (proven in v1.0)
+**Current focus:** Planning next milestone (PRD-2 GitOps/ArgoCD candidate) — start with /gsd-new-milestone
 
 ## Current Position
 
-Phase: 04 (makefile-documentation) — COMPLETE
-Plan: 3 of 3 complete
-Status: Milestone v1.0 complete — MAKE-02 verified live twice (11:22 executor run + 22:51 re-verification) and human-approved (WSL2 N/A)
-Last activity: 2026-07-07 -- 04-03 sign-off received; tracking closed out
-
-Progress: [██████████] 100%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-07 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
@@ -90,3 +88,7 @@ None yet.
 Last session: 2026-07-07 (04-03 verification + sign-off)
 Stopped at: Milestone v1.0 complete; next action is milestone audit/completion (/gsd-audit-milestone or /gsd-complete-milestone)
 Resume file: none
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
