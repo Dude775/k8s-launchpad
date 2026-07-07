@@ -1,338 +1,334 @@
 # Pitfalls Research
 
-**Domain:** Local Kubernetes developer platform — kind + Helm + Flask + MongoDB on Windows/WSL2
-**Researched:** 2026-07-04
-**Confidence:** HIGH (most pitfalls verified against official docs, kind issues, Bitnami announcements)
+**Domain:** Adding an IDP dashboard (Flask+htmx, K8s API diagnostics, shared MongoDB, status aggregation) to an existing single-app local Kubernetes platform (k8s-launchpad v1.0)
+**Researched:** 2026-07-08
+**Confidence:** HIGH — pitfalls derived from the actual v1.0 codebase (Makefile, chart templates, conftest.py) plus verified library documentation patterns
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: kind Local Registry — containerd config not propagated to nodes
+### Pitfall 1: Makefile variable collision — second app overrides first app's build/deploy targets
 
 **What goes wrong:**
-You start a local Docker registry container, push your image to `localhost:5001`, and pods still fail with `ErrImagePull` / `ImagePullBackOff`. The image is in the registry. The registry is running. But the kind nodes' containerd does not know to route `localhost:5001` through the registry container — `localhost` inside a container is the container's own loopback, not the host's.
+The existing Makefile defines `IMAGE`, `RELEASE`, and `CHART` as top-level variables defaulting to `field-guide-api` values. Adding a `make build` and `make deploy` for `launchpad` by changing those defaults — or adding targets without namespacing — means `make deploy` now deploys the dashboard and leaves no obvious way to redeploy the field-guide API without manually passing every override. The existing smoke test and port-forward targets silently target the wrong release.
 
 **Why it happens:**
-kind nodes are Docker containers with their own network namespace. `localhost:5001` inside a node container does not reach the host's port 5001. containerd must be explicitly told via `/etc/containerd/certs.d/localhost:5001/hosts.toml` to mirror `localhost:5001` → `http://kind-registry:5000` (the registry's Docker network hostname). Without this file on every node, pulls fail.
+The v1.0 Makefile was designed for a single app. The `IMAGE`, `RELEASE`, and `CHART` variables at the top are the only coordination point. Developers add a second set of targets, realize the defaults conflict, and either change the defaults (breaking the first app) or add ad-hoc targets that duplicate logic.
 
 **How to avoid:**
-Use the official kind-with-registry script pattern verbatim. It does three things in order: (1) creates the registry container pinned to a named Docker network, (2) creates the kind cluster with a `containerdConfigPatches` block enabling the `config_path` directory, (3) patches each node with the `hosts.toml` mirror file, and (4) connects the registry container to the `kind` Docker network. Do not split these steps or skip the network connection step.
-
-Minimum cluster config patch:
-```yaml
-containerdConfigPatches:
-  - |-
-    [plugins."io.containerd.grpc.v1.cri".registry]
-      config_path = "/etc/containerd/certs.d"
-```
-
-Then for each node, write `/etc/containerd/certs.d/localhost:5001/hosts.toml`:
-```toml
-[host."http://kind-registry:5000"]
-  capabilities = ["pull", "resolve"]
-```
+Namespace every variable for both apps: `FGA_IMAGE`, `FGA_RELEASE`, `FGA_CHART` for field-guide-api; `LP_IMAGE`, `LP_RELEASE`, `LP_CHART` for launchpad. Keep the original top-level variable names removed or aliased to avoid ambiguity. Add explicit targets: `build-launchpad`, `deploy-launchpad`, `smoke-launchpad`, `port-forward-launchpad`. The shared `make up` composite target must sequence both apps: `cluster-up build-fga load-fga deploy-fga build-launchpad load-launchpad deploy-launchpad`.
 
 **Warning signs:**
-- `kubectl describe pod` shows `ErrImagePull` with message "no such host" or "connection refused" for `localhost:5001`
-- `docker push localhost:5001/myimage:tag` succeeds but pod still fails
-- `kind load docker-image` works but registry push does not (different code paths entirely)
+- `make deploy` changes the running Helm release from `field-guide-api` to `launchpad` silently
+- `make smoke` tests the wrong service (port-forward targets `svc/field-guide-api` but dashboard is on `svc/launchpad`)
+- `helm list` shows only one release instead of two after `make up`
 
-**Phase to address:** Phase: Cluster Setup (kind + registry script)
+**Phase to address:** Phase: Monorepo scaffold for second app (first task of v1.1 — before any code is written)
 
 ---
 
-### Pitfall 2: `kind load docker-image` + `:latest` tag = silent pull failure
+### Pitfall 2: Helm Service selector collision between two charts in the same namespace
 
 **What goes wrong:**
-You run `kind load docker-image myapp:latest`, it succeeds. You deploy. Kubernetes immediately tries to pull `myapp:latest` from the internet and fails with `ImagePullBackOff`. The loaded image is ignored.
+The new `launchpad` chart is created with `helm create charts/launchpad`, and the developer forgets to change the `app.kubernetes.io/name` value in the generated helpers. Both charts end up with identical `selectorLabels` — `app.kubernetes.io/name: launchpad` and `app.kubernetes.io/instance: launchpad`, but if the release name or chart name collide with the existing chart's pattern, the Service `selector` may route to the wrong pods. The v1.0 chart `_helpers.tpl` uses `app.kubernetes.io/name: {{ include "field-guide-api.name" . }}` derived from Chart.Name — the new chart must derive from its own Chart.Name.
+
+More specifically: the `mongodb.selectorLabels` helper in the v1.0 chart generates `app.kubernetes.io/name: field-guide-api-mongodb`. If the launchpad chart also bundles MongoDB with a MongoDB deployment that carries any overlapping selector labels (e.g., `app.kubernetes.io/instance: launchpad` but `app.kubernetes.io/name: launchpad-mongodb`), Kubernetes Services won't cross-select — but if both charts are installed in the same namespace and a developer copies a Service selector verbatim from one chart to another without renaming, pods get wrong traffic.
 
 **Why it happens:**
-Kubernetes defaults `imagePullPolicy` to `Always` when the image tag is `latest`. `Always` means containerd will attempt a remote pull regardless of whether the image is already present locally. The kind-loaded image sits unused.
+`helm create` generates a chart with `{{ .Chart.Name }}` in helpers. If the developer edits the chart templates but not `Chart.yaml`'s `name` field, or copies templates from the v1.0 chart without renaming the Helm template function names (`field-guide-api.selectorLabels` → `launchpad.selectorLabels`), selector strings can collide.
 
 **How to avoid:**
-Either (a) use versioned tags (`myapp:0.1.0`) — they default to `IfNotPresent` which uses the loaded copy — or (b) explicitly set `imagePullPolicy: IfNotPresent` in the Helm chart's Deployment template. For the registry-based approach (recommended for this project), tag as `localhost:5001/myapp:0.1.0` and push to registry; `imagePullPolicy: IfNotPresent` is still required during cluster-up before first push.
+- The new chart's `Chart.yaml` name must be `launchpad`, not `field-guide-api`
+- All `_helpers.tpl` function names must use the chart's own prefix: `launchpad.fullname`, `launchpad.selectorLabels`, `launchpad.mongodb.fullname`
+- After `helm install`, run `kubectl get ep` on both Services — endpoints must list only the correct pod IPs
+- The launchpad's MongoDB (or shared MongoDB connection) must use a unique service name — do not share the `field-guide-api-mongodb` Service hostname unless intentionally cross-chart (see Pitfall 8)
 
 **Warning signs:**
-- Pod stuck in `ImagePullBackOff` immediately after `kind load` reports success
-- `kubectl describe pod` shows pull attempt against `docker.io/library/myapp` (default registry)
-- Works with explicit `imagePullPolicy: Never` but not with default
+- `kubectl get endpoints` shows a Service with zero endpoints despite pods Running
+- Field-guide-api returns HTML fragments instead of JSON (routing to launchpad pods)
+- `helm lint` passes but `kubectl describe svc` shows no endpoints for one of the two Services
 
-**Phase to address:** Phase: Containerization + Helm chart authoring
+**Phase to address:** Phase: Launchpad Helm chart scaffold
 
 ---
 
-### Pitfall 3: CRLF line endings in shell scripts break inside containers and WSL2
+### Pitfall 3: Kubernetes Python client blocking the single gunicorn worker
 
 **What goes wrong:**
-Scripts (the kind+registry setup script, entrypoints, healthcheck scripts) checked out on Windows have `\r\n` line endings. When executed inside a Linux container or WSL2, bash sees a trailing `\r` on every line, producing: `/bin/bash^M: No such file or directory` or `$'\r': command not found`.
+The dashboard's status/diagnostics endpoints call `kubernetes.client.CoreV1Api().list_namespaced_pod(...)` synchronously from a Flask route handler. The kubernetes Python client's HTTP calls use `urllib3` and default to no client-side timeout (`_request_timeout=None`). When the kind API server is slow (cluster under load, resuming from laptop sleep) or unreachable, the urllib3 call hangs indefinitely. With `--workers 1` (the correct setting for this project), the single gunicorn worker is blocked. Every subsequent HTTP request to the dashboard — including htmx polls from open browser tabs, the Kubernetes readinessProbe, and health checks — queues behind the hung worker. gunicorn's worker timeout (default 30s) kills and restarts the worker, logging `[CRITICAL] WORKER TIMEOUT`. The pod enters a restart loop.
 
 **Why it happens:**
-Git on Windows defaults to `core.autocrlf=true`, converting LF to CRLF on checkout. VS Code on Windows defaults to CRLF for new files. A script with `#!/bin/bash\r\n` has a broken shebang; bash cannot find the interpreter `bash\r`.
+The kubernetes Python client does not set a default timeout. The gunicorn `--timeout` setting (worker request timeout) measures time since the last I/O acknowledgement, not total wall-clock time — a hanging urllib3 socket does not generate I/O, so gunicorn does not detect the hang until 30s. Meanwhile every htmx `hx-trigger="every 5s"` poll lands on the stuck worker.
 
 **How to avoid:**
-Commit a `.gitattributes` file as the very first commit (before any scripts):
+Always set `_request_timeout` on every kubernetes client call:
+```python
+v1.list_namespaced_pod(namespace="default", _request_timeout=5)
 ```
-*.sh    text eol=lf
-*.yaml  text eol=lf
-*.yml   text eol=lf
-Makefile text eol=lf
+Wrap all K8s client calls in `try/except ApiException` plus a broad `except Exception` fallback that returns a degraded status dict instead of propagating exceptions to Flask's error handler. Apply an application-level timeout guard (e.g., `concurrent.futures.ThreadPoolExecutor` with `.result(timeout=5)`) if the route is ever called under htmx polling.
+
+**Warning signs:**
+- `[CRITICAL] WORKER TIMEOUT` appears in gunicorn logs during cluster restarts or laptop sleep/wake
+- Dashboard becomes unresponsive when the kind cluster is paused (Docker Desktop container paused)
+- `make smoke` hangs on the dashboard endpoints after `docker pause` of the cluster
+
+**Phase to address:** Phase: K8s API diagnostics implementation
+
+---
+
+### Pitfall 4: `load_incluster_config()` called at import time — app fails to start outside cluster
+
+**What goes wrong:**
+The kubernetes client initialization is placed at module level (outside a function), like:
+```python
+# k8s_client.py — BAD
+from kubernetes import client, config
+config.load_incluster_config()   # called at import
+v1 = client.CoreV1Api()
 ```
-This enforces LF on checkout for all shell scripts and YAML regardless of platform. Verify with `file scripts/cluster-up.sh` in WSL2 — should say "ASCII text" not "ASCII text, with CRLF line terminators".
-
-**Warning signs:**
-- `^M` visible in `cat -A script.sh`
-- `bad interpreter` errors when running scripts in WSL2 or from Makefile
-- Scripts work in Git Bash (which tolerates CRLF) but fail inside `docker exec` or `kubectl exec`
-
-**Phase to address:** Phase: Repo scaffold (first commit, before any scripts exist)
-
----
-
-### Pitfall 4: MSYS path mangling in Git Bash breaks docker and kubectl flags
-
-**What goes wrong:**
-Running `docker run -v /c/Users/...:/app` or `kubectl cp /path/to/file pod:/dest` from Git Bash causes errors because MSYS2 (Git Bash's runtime) auto-translates Unix paths to Windows paths when calling native Windows binaries. The translated path is wrong or contains backslashes that the tool rejects.
+When `conftest.py` imports `create_app`, Python imports `k8s_client.py`, which calls `load_incluster_config()`. Outside a pod, this raises `kubernetes.config.config_exception.ConfigException: Service host/port is not set.` — the entire test suite fails with an import error before a single test runs.
 
 **Why it happens:**
-MSYS2 translates arguments beginning with `/` to Windows paths before passing them to `.exe` binaries. So `/app` becomes `C:\app`, and `-v /app:/container` becomes `-v C:\app:C:\container`, which is not what docker expects.
+The pattern comes from the kubernetes Python client's example files, which show `config.load_incluster_config()` at module scope. Developers copy this pattern without accounting for the local dev / test environment where `/var/run/secrets/kubernetes.io/serviceaccount/token` doesn't exist.
 
 **How to avoid:**
-In Makefile targets that use volume mounts or path arguments, prefix with `MSYS_NO_PATHCONV=1`:
-```makefile
-MSYS_NO_PATHCONV=1 docker run -v $(PWD)/data:/data myimage
+Always initialize the kubernetes client lazily inside a factory function and catch `ConfigException`:
+```python
+# k8s_client.py — CORRECT
+from kubernetes import client, config
+from kubernetes.config.config_exception import ConfigException
+
+_k8s_available = False
+_v1 = None
+
+def get_k8s_client():
+    global _k8s_available, _v1
+    if _v1 is not None:
+        return _v1, _k8s_available
+    try:
+        config.load_incluster_config()
+        _k8s_available = True
+    except ConfigException:
+        _k8s_available = False
+        return None, False
+    _v1 = client.CoreV1Api()
+    return _v1, True
 ```
-Or set at the top of the Makefile:
-```makefile
-export MSYS_NO_PATHCONV := 1
+Routes check `_k8s_available` and return a degraded JSON response when False. Tests mock `get_k8s_client` to return `(None, False)` without touching the cluster.
+
+**Warning signs:**
+- `pytest` exits immediately with `ConfigException: Service host/port is not set` before any test runs
+- `create_app()` in conftest fails with an import error from the k8s module
+- The app works when `kubectl exec`-ed into but fails on the developer's machine with `make test`
+
+**Phase to address:** Phase: K8s API diagnostics implementation (establish the lazy-init pattern before writing any route that uses the client)
+
+---
+
+### Pitfall 5: Dashboard `/health` depending on downstream services causes readinessProbe cascades
+
+**What goes wrong:**
+The launchpad `/health` endpoint is implemented to check: MongoDB ping + K8s API ping + field-guide-api's `/health` (HTTP call). The Helm chart's `readinessProbe` calls `/health` every 5 seconds. When the K8s API is slow (Pitfall 3) or the field-guide-api pod is restarting, `/health` blocks for up to the timeout. The readinessProbe times out (`timeoutSeconds: 3` but the upstream call takes 5s). Kubernetes marks the launchpad pod NotReady and stops routing traffic. The pod then can't be reached by anything else, including the developer trying to debug why the dashboard is down.
+
+The recursive case: if field-guide-api's `/health` also checks MongoDB, and MongoDB is briefly slow, both apps mark themselves NotReady simultaneously. The cluster appears fully broken during a routine MongoDB restart.
+
+**Why it happens:**
+Developers naturally want the health endpoint to show "everything is green." The Kubernetes probe does not distinguish between "this pod is healthy" and "all services this pod depends on are healthy." Liveness and readiness probe design is often misunderstood as a system health check rather than a pod health check.
+
+**How to avoid:**
+Split health semantics strictly:
+- `GET /health` (readiness): checks ONLY this pod's own dependencies — MongoDB ping with 2s timeout. Does NOT call field-guide-api. Does NOT call K8s API.
+- `GET /api/status` (platform status): checks field-guide-api reachability, K8s API, and other platform components. Returns degraded JSON gracefully when anything is slow. This endpoint is called by the dashboard's htmx status cards, NOT by the readinessProbe.
+
+The `_helpers.tpl` pattern from v1.0 already implements this correctly for field-guide-api — replicate it exactly for launchpad.
+
+**Warning signs:**
+- `kubectl get pod launchpad-xxx` shows `0/1 READY` during a MongoDB restart
+- `kubectl describe pod launchpad-xxx` shows `Readiness probe failed: Get "http://...:8000/health": context deadline exceeded`
+- Dashboard becomes inaccessible whenever any downstream service hiccups
+
+**Phase to address:** Phase: Launchpad app scaffold and `/health` endpoint
+
+---
+
+### Pitfall 6: htmx polling + synchronous K8s API = worker starvation
+
+**What goes wrong:**
+The dashboard's status cards use `hx-trigger="every 5s"` to poll `/api/status`. This endpoint calls the kubernetes Python client synchronously (see Pitfall 3). With one browser tab open: 12 requests/minute. Each request that hits a slow K8s API holds the single gunicorn worker for up to the timeout. A second browser tab doubles the rate to 24/minute. The worker cannot complete one request before the next arrives. The browser shows spinners on the status cards; htmx queues requests; gunicorn logs worker timeouts; the dashboard falls over.
+
+**Why it happens:**
+htmx polling appears harmless in demos with fast mock responses. The danger emerges when the polled endpoint does real I/O. The `hx-trigger="every 5s"` attribute has no built-in backoff, no visibility check, and no request debouncing — it fires regardless of whether the previous request completed.
+
+**How to avoid:**
+- Keep the `/api/status` K8s client call under a strict 3-second timeout (see Pitfall 3)
+- Use `hx-trigger="every 10s"` minimum — never below 5s for endpoints doing real I/O
+- Add `hx-trigger="every 10s [document.visibilityState !== 'hidden']"` to suppress polling in background tabs
+- Cache the K8s API response in-process (a module-level dict with a TTL of 8–10 seconds) so concurrent polls within the same interval don't each make a new API call
+- Alternative: use htmx load polling (`hx-trigger="load delay:10s"`) which chains requests sequentially (next fires only after previous response), preventing concurrent accumulation
+
+**Warning signs:**
+- `/api/status` responds fast when called directly with `curl` but the browser shows permanent spinners under normal use
+- gunicorn logs show `[CRITICAL] WORKER TIMEOUT` at the same cadence as the poll interval
+- `kubectl get pod launchpad` shows `RESTARTS: 1` after a few minutes of browser use
+
+**Phase to address:** Phase: htmx UI and status polling implementation
+
+---
+
+### Pitfall 7: Unbounded MongoDB activity/events feed collection
+
+**What goes wrong:**
+Every platform event (page load, service registration, status check, K8s API query) writes a document to a `platform_events` collection. There is no TTL index, no capped size, and no document limit. After a weekend of demos, the collection has 200k+ documents. `GET /api/events` does a full collection scan with no limit/sort index, taking seconds. The events page hangs. The collection's WiredTiger storage grows unbounded.
+
+**Why it happens:**
+Inserting an event document is a one-liner. Adding a TTL index is a separate step developers defer to "later" — but "later" never arrives in a local dev project. Capped collections require upfront planning because you cannot add a TTL index to a capped collection after the fact, and you cannot convert a regular collection to capped without dropping it.
+
+**How to avoid:**
+Decide the retention strategy before writing the first event document:
+
+Option A (recommended): Regular collection with TTL index. At app startup (or Helm init job), create the index:
+```python
+db.platform_events.create_index("created_at", expireAfterSeconds=604800)  # 7 days
 ```
-For kubeconfig paths, use the WSL2 Unix path explicitly (`~/.kube/config`) rather than Windows paths. Alternatively, run all cluster operations from inside WSL2, not Git Bash.
+Always include `created_at: datetime.utcnow()` in every event document. Always query with `.sort("created_at", -1).limit(100)`.
 
-**Warning signs:**
-- docker `-v` mount errors mentioning unexpected colons or Windows drive letters
-- kubectl errors about invalid kubeconfig path containing backslashes
-- Commands work in WSL2 terminal but fail identically in Git Bash
-
-**Phase to address:** Phase: Makefile + Cluster Setup
-
----
-
-### Pitfall 5: Bitnami MongoDB chart image unavailability (post-August 2025)
-
-**What goes wrong:**
-`helm install` or `helm upgrade` for MongoDB using `repo.helms.sh/bitnami` or `docker.io/bitnami/mongodb` with a versioned tag (e.g., `7.0.x`) fails with `ImagePullBackOff` because the image no longer exists at `docker.io/bitnami/`.
-
-**Why it happens:**
-Bitnami announced effective August 28, 2025: versioned MongoDB images moved from the public `docker.io/bitnami` catalog to `docker.io/bitnamilegacy` (no further updates) or behind a Broadcom commercial subscription. OCI-packaged Helm charts at `docker.io/bitnamicharts` remain available but reference image tags that no longer pull without credentials. Only a limited "latest-only" free tier remains at `docker.io/bitnami`.
-
-**How to avoid:**
-For this project, use the official MongoDB community Docker image (`mongo:7.0`) with a minimal custom Deployment manifest or a simple community Helm chart (e.g., the `mongodb` chart from `https://charts.helm.sh/stable` community fork). Alternatively, use MongoDB's own official Helm chart via `https://mongodb.github.io/helm-charts` (the MongoDB Community Kubernetes Operator). Do NOT depend on `helm repo add bitnami https://charts.bitnami.com/bitnami` pulling versioned images; it will fail in 2025+.
-
-Simple Deployment alternative that avoids the Bitnami dependency entirely:
-```yaml
-image: mongo:7.0
+Option B: Capped collection (max 10k documents, 50MB):
+```python
+db.create_collection("platform_events", capped=True, size=52428800, max=10000)
 ```
-with a Kubernetes Secret for `MONGO_INITDB_ROOT_USERNAME` / `MONGO_INITDB_ROOT_PASSWORD`.
+Note: capped collections and TTL indexes are mutually exclusive — pick one.
+
+Both: Add a compound index on `(event_type, created_at)` to support filtered queries. Query always includes `.limit()` — never unbounded `find()`.
 
 **Warning signs:**
-- `helm install` succeeds but MongoDB pod stuck in `ImagePullBackOff`
-- `kubectl describe pod` shows `403 Forbidden` or `unauthorized` from `docker.io/bitnami/mongodb`
-- Works on older environments that cached the image, fails on fresh clusters
+- `db.platform_events.count_documents({})` returns > 10k after a day of use
+- `GET /api/events` response time grows over multiple demo sessions
+- `mongomock` tests pass but real MongoDB shows slow queries under load (mongomock doesn't enforce collection size)
 
-**Phase to address:** Phase: MongoDB in-cluster deployment
+**Phase to address:** Phase: Activity feed and MongoDB schema design
 
 ---
 
-### Pitfall 6: Secrets committed to git before .gitignore exists
+## Moderate Pitfalls
+
+### Pitfall 8: Shared MongoDB — database name or collection name collision
 
 **What goes wrong:**
-A `.env` file, `values-local.yaml` with real passwords, or a kubeconfig gets committed before `.gitignore` is in place. Even after adding `.gitignore` and removing the file, the secret remains in git history forever — visible to anyone who clones the repo.
+The `launchpad` app uses `mongoDbName: fieldguide` in its Helm values (copied from the field-guide-api chart) and writes service registrations to a `services` collection. The field-guide-api also happens to use a `services` collection for some future feature, or the launchpad writes to `entries` by mistake. Both apps share the same MongoDB pod. Cross-collection contamination is silent: inserts succeed, but one app reads the other's documents.
 
 **Why it happens:**
-Developers scaffold the app, create `.env` to test locally, then forget to add `.gitignore` first. Or they add `values-local.yaml` with `mongodb.auth.rootPassword: mypassword` intending to "clean it up later."
+The values.yaml template pattern from v1.0 is designed to be copied. The `mongoDbName` field defaults to `fieldguide`. Developers set the launchpad chart's `mongoDbName` to `launchpad` but forget to update the runtime `MONGO_DBNAME` environment variable, or vice versa.
 
 **How to avoid:**
-The `.gitignore` file must be the very first commit or part of the repo initialization commit — before any code, env files, or kubeconfigs. Minimum entries:
+- The launchpad chart must have `mongoDbName: launchpad` as its default — never `fieldguide`
+- Collection names must be scoped: `platform_services`, `platform_events` in the `launchpad` database vs `entries` in the `fieldguide` database
+- If the launchpad connects to the field-guide-api's MongoDB pod (shared instance, no separate MongoDB), the MONGO_URI in the launchpad's Secret must specify `/launchpad` as the database, not `/fieldguide`
+- At startup, log `app.config["MONGO_DBNAME"]` so the developer can verify which database the app connected to
+
+**Warning signs:**
+- `db.fieldguide.entries` appears in the launchpad app's MongoDB queries (wrong database)
+- `kubectl exec -it <mongodb-pod> -- mongosh` → `db.launchpad.getCollectionNames()` returns empty despite app running
+- Field-guide-api entries disappear after launchpad writes to the same collection
+
+**Phase to address:** Phase: Launchpad app factory and MongoDB integration
+
+---
+
+### Pitfall 9: htmx fragment vs full-page route confusion — browser reload breaks the page
+
+**What goes wrong:**
+A route returns an HTML fragment (a `<div>` with status cards, no `<head>` or `<body>`). htmx swaps it into the DOM correctly during normal navigation. But if the user bookmarks the fragment URL, refreshes the page, or htmx pushes the fragment URL to history via `hx-push-url`, the browser loads the raw fragment on next visit — a bare `<div>` with no CSS, no JS, no layout. The page appears broken.
+
+**Why it happens:**
+In a Jinja2 + htmx app without a JavaScript SPA router, every route must decide: does it serve a full page (extending `base.html`) or a fragment? When `hx-boost` is active, `GET` navigation returns fragments and htmx swaps them. If the same URL is hit directly (via browser address bar, curl, or htmx request error recovery), it must still return the full page. Developers write two separate routes instead of detecting the request type.
+
+**How to avoid:**
+- Distinguish routes at the template level using Flask's `request.headers.get("HX-Request")` header (htmx sets this on all AJAX requests):
+```python
+@bp.route("/status")
+def status():
+    if request.headers.get("HX-Request"):
+        return render_template("_status_cards.html", ...)   # fragment only
+    return render_template("status.html", ...)              # full page wrapping the fragment
 ```
-.env
-*.local.yaml
-kubeconfig
-*.kubeconfig
-__pycache__/
-.venv/
-*.pyc
-.pytest_cache/
-```
-Use `git status` before every commit to verify no unintended files are staged. Add a `make check-secrets` target that greps for common secret patterns.
+- Use a naming convention: templates prefixed with `_` are fragments never served as standalone pages
+- Do NOT use `hx-push-url` on fragment routes — only push URL when the target is a full page
+- Test by navigating directly to fragment URLs in a fresh browser tab (no htmx context)
 
 **Warning signs:**
-- `git log --all --full-history -- .env` shows a result
-- `.env` appears in `git diff HEAD` as tracked
-- `git status` shows `.env` as "Changes to be committed" but it contains real values
+- Page looks correct under normal navigation but broken after browser refresh
+- Fragment HTML appears as raw text in the browser when the URL is bookmarked and revisited
+- `curl http://localhost:8080/api/status` returns a bare `<div>` without `<html>` wrapper
 
-**Phase to address:** Phase: Repo scaffold (first commit)
+**Phase to address:** Phase: Jinja2 template structure and htmx route design
 
 ---
 
-### Pitfall 7: Flask dev server in production Docker image
+### Pitfall 10: Port collision on `make port-forward` with two services
 
 **What goes wrong:**
-The Dockerfile `CMD` uses `flask run` or `python app.py` with `app.run(debug=True)`. The app technically starts and responds to requests, passing local tests. In a Kubernetes pod, it handles one request at a time, leaks debug information, and does not respond to `SIGTERM` — Kubernetes sends `SIGTERM` before `SIGKILL`, but Flask's dev server ignores it, causing a 30-second forced kill delay on every rollout.
+The existing `make port-forward` target forwards `svc/field-guide-api` to `localhost:8080`. The developer adds a `make port-forward` for the launchpad also on port 8080. The second `kubectl port-forward` fails with `bind: address already in use` — silently when launched in the background. The developer sees the field-guide-api on 8080 and assumes the launchpad is at 8080 too, getting confused about which service they're testing.
 
 **Why it happens:**
-`flask run` is the natural development command. Developers copy it to Dockerfile CMD without switching to a production WSGI server.
+The Makefile has a single `port-forward` target. The developer adds a second target with the same port. Background-launched `kubectl port-forward` processes fail silently (stdout redirected to `/dev/null`).
 
 **How to avoid:**
-Dockerfile CMD must use gunicorn from day one:
-```dockerfile
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "30", "app:app"]
-```
-Set `--workers 1` for the local dev image to avoid the multiprocess prometheus issue (see Pitfall 8). Never set `debug=True` outside of `if __name__ == "__main__"` guards. The Flask dev server is acceptable for `make run-local` (host execution), not in Docker.
+Assign fixed, distinct ports and document them in `make help`:
+- `port-forward-fga`: `localhost:8080` → `svc/field-guide-api:80`
+- `port-forward-launchpad`: `localhost:8081` → `svc/launchpad:80`
+
+The `make smoke` targets must use the correct port for each service. The README and `make help` documentation must clearly show which port each service uses. Add a `port-forward-all` target that starts both in the background with a verification step.
 
 **Warning signs:**
-- Dockerfile CMD contains `flask run` or `python app.py`
-- Pod takes 30+ seconds to terminate during `kubectl rollout restart`
-- `/metrics` returns inconsistent values across requests (sign of multiprocess without multiprocess mode)
-- `app.run(debug=True)` present unconditionally in `app.py`
+- `make port-forward-launchpad` exits immediately with no error but no traffic reaches the service
+- `lsof -i :8080` shows two `kubectl` processes competing for the same port
+- Developer is testing the wrong service and doesn't realize it
 
-**Phase to address:** Phase: Containerization (Dockerfile)
+**Phase to address:** Phase: Makefile extension for second app
 
 ---
 
-### Pitfall 8: prometheus_client multiprocess collision with gunicorn workers
+### Pitfall 11: mongomock gap — TTL indexes and capped collections not fully supported
 
 **What goes wrong:**
-The `/metrics` endpoint returns counters that reset between scrapes, show 0 when traffic exists, or return different values on each request. Prometheus graphs are meaningless.
+Tests use `mongomock.MongoClient()` (established pattern from v1.0). The launchpad app uses `create_index(..., expireAfterSeconds=604800)` at startup and capped collection creation. mongomock accepts these calls without error but does not enforce TTL expiration or collection size limits. Test coverage for the events feed appears to pass, but the actual behavior on real MongoDB differs: capped collections refuse inserts beyond `max` documents (unexpected for the developer who only tested with mongomock), and TTL expiration background jobs don't run during tests — the "event expires after 7 days" behavior is never tested.
 
 **Why it happens:**
-prometheus_client stores metrics in-process by default. With gunicorn using N workers, each worker maintains its own in-memory metric state. A scrape hits worker A, next scrape hits worker B — you get one worker's partial view. Counters appear to restart. Gauges oscillate.
+mongomock implements the MongoDB wire protocol surface but not background threads (TTL cleanup) or storage constraints (capped size). Developers assume green tests mean the production behavior is verified.
 
 **How to avoid:**
-Since `/metrics` is a seam for PRD-4 (not actively scraped in PRD-1), set `--workers 1` in gunicorn for now and document that multi-worker support requires `PROMETHEUS_MULTIPROC_DIR`. When workers > 1 is needed:
-1. Set env var `PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc`
-2. Create that directory before gunicorn starts (Dockerfile or entrypoint)
-3. Wipe it on gunicorn startup (stale mmap files cause incorrect cumulative counts)
-4. Add `MultiProcessCollector` in the `/metrics` route handler
+- Write unit tests that assert the TTL index exists (check `collection.index_information()`) rather than testing expiry timing
+- Write integration tests for the events feed using a real mongo:7 container (e.g., via `pytest-docker` or a Makefile `make test-integration` target)
+- Document explicitly in `conftest.py` that mongomock does not enforce TTL or capped collection limits
+- Add a startup check in the app that logs `"platform_events TTL index: OK"` when the index exists and `"WARNING: TTL index missing"` otherwise
 
 **Warning signs:**
-- `/metrics` returns different Counter values on repeated `curl` calls
-- Metrics that should monotonically increase appear to reset
-- Works with `gunicorn --workers 1` but breaks with 2+
+- `test_event_expires_after_ttl` passes but events never disappear in the running deployment
+- A test creating a capped collection with `max=10` succeeds even when inserting 1000 documents
+- The events API returns thousands of documents despite expected TTL cleanup
 
-**Phase to address:** Phase: Flask app + Containerization; full fix deferred to PRD-4
+**Phase to address:** Phase: Activity feed implementation and test design
 
 ---
 
-### Pitfall 9: Makefile — tabs, shell assumptions, make not installed in Git Bash
+### Pitfall 12: Second Helm chart's MongoDB — cross-chart hostname wiring mistake
 
 **What goes wrong:**
-Three failure modes:
-1. Makefile recipe lines use spaces instead of tabs (editor auto-converts) → `make: *** missing separator. Stop.`
-2. `make` is not in Git Bash's PATH (Git Bash does not ship with make) → `make: command not found`
-3. Recipes use bash-isms (`[[`, `source`, `local`) but SHELL defaults to `sh` → syntax errors
+The launchpad app is configured to connect to the existing `field-guide-api`'s MongoDB pod (rather than deploying its own). The MONGO_URI in the launchpad's Helm Secret references the MongoDB service as `field-guide-api-mongodb:27017` — correct for the service name in the `default` namespace. But if the developer uses the launchpad chart's own MongoDB hostname helper (`launchpad-mongodb`), the DNS lookup fails with `No route to host`. Alternatively, if both charts deploy their own separate MongoDB instances, the `launchpad`'s MongoDB has `mongodb.enabled: true` and the developer forgets to set `mongoDbName: launchpad`, writing to the fieldguide database instead.
 
 **Why it happens:**
-VS Code and many editors replace tabs with spaces on paste or auto-format. Git Bash on Windows only includes core POSIX tools; `make` requires separate installation (Chocolatey, MSYS2, or WSL). `SHELL` is never inherited from environment in make; it defaults to `/bin/sh`.
+Cross-chart service references are not validated by `helm lint` or `helm upgrade`. The error only appears at runtime as a MongoDB connection failure in the pod logs.
 
 **How to avoid:**
-- Configure VS Code to never expand tabs in Makefile (`.editorconfig`: `[Makefile] indent_style = tab`)
-- Document in README that `make` on Windows requires: `choco install make` or run from WSL2
-- Set at top of Makefile: `SHELL := /bin/bash` and add `.SHELLFLAGS := -eu -o pipefail -c`
-- Mark all non-file targets: `.PHONY: cluster-up cluster-down build load deploy test clean`
-- Test every Makefile target in both Git Bash and WSL2 before marking the phase done
+Decision first, then implementation: Choose ONE MongoDB instance for v1.1 (the shared field-guide-api MongoDB, or a new launchpad-owned one). Document the decision in `CONTEXT.md`. If sharing: disable MongoDB in the launchpad chart (`mongodb.enabled: false`) and supply `externalMongoUri` via `--set` pointing to `field-guide-api-mongodb:27017` — the v1.0 chart already has this `externalMongoUri` seam in `values.yaml`. If separate: set `mongoDbName: launchpad` and verify with `kubectl exec <launchpad-pod> -- env | grep MONGO` that the correct database name is injected.
 
 **Warning signs:**
-- `make: *** missing separator` on any target
-- `[[: not found` or `source: not found` in recipe output
-- `make cluster-up` works in WSL2 but fails in Git Bash with path errors
+- `kubectl logs <launchpad-pod>` shows `No servers found yet, connection refused` on startup
+- `mongosh` inside the MongoDB pod shows the `launchpad` database is missing while the app claims to be writing events
+- `helm lint charts/launchpad` passes but `make smoke-launchpad` times out
 
-**Phase to address:** Phase: Makefile scaffold (wrap every other phase)
-
----
-
-### Pitfall 10: MongoDB auth — connection string mismatch and authSource
-
-**What goes wrong:**
-Flask connects to MongoDB with pymongo using a connection string that matches the chart's root username/password but authentication still fails with `Authentication failed`. Or auth passes but the app writes to a database it cannot read back because authSource defaults differ.
-
-**Why it happens:**
-MongoDB's `MONGO_INITDB_ROOT_USERNAME` creates a user in the `admin` database. pymongo connection strings that omit `authSource=admin` default to authenticating against the database named in the URI, not `admin`. So `mongodb://root:pass@mongodb:27017/fieldguide` attempts auth against `fieldguide` where the root user does not exist.
-
-**How to avoid:**
-Connection string must explicitly specify authSource:
-```
-mongodb://root:$(MONGO_ROOT_PASSWORD)@mongodb:27017/fieldguide?authSource=admin
-```
-Inject the password from a Kubernetes Secret via environment variable into the Flask pod — never hardcode. The Secret name must match what the chart creates (or use `auth.existingSecret` in chart values to control the name explicitly).
-
-**Warning signs:**
-- `pymongo.errors.OperationFailure: Authentication failed` in Flask logs
-- Works with `auth.enabled: false` in chart values but breaks with auth enabled
-- `kubectl logs` shows successful MongoDB startup but Flask crashes on first DB call
-
-**Phase to address:** Phase: MongoDB deployment + Flask app integration
-
----
-
-### Pitfall 11: MongoDB data loss on `kind cluster-down`
-
-**What goes wrong:**
-`make cluster-down` destroys the kind cluster. All MongoDB data (PVCs backed by kind's default `standard` StorageClass, which maps to node-local storage inside Docker containers) is permanently lost. This is expected but surprises developers if not documented.
-
-**Why it happens:**
-kind's nodes are Docker containers. When the kind cluster is deleted, those containers are removed — taking all PVC data with them. There is no persistence layer that survives cluster teardown by design.
-
-**How to avoid:**
-Document this explicitly in README: "Data is ephemeral. `make cluster-down` destroys all MongoDB data." For PRD-1, this is acceptable — the field-guide app can seed data on startup from a fixtures file. Add a `make seed` target that POST-s fixture entries after deploy. Do NOT spend time on hostPath volume persistence for local kind in PRD-1; it is a distraction.
-
-**Warning signs:**
-- Developer surprised that MongoDB is empty after `make cluster-down && make cluster-up`
-- Time spent debugging PVC binding for local persistence instead of building the platform
-
-**Phase to address:** Phase: MongoDB deployment — document explicitly, add seed target
-
----
-
-### Pitfall 12: Docker Desktop vs. native Docker in WSL2 — split daemon problem
-
-**What goes wrong:**
-You install Docker Desktop on Windows with WSL2 backend AND separately install Docker Engine inside WSL2. Now there are two Docker daemons. Images built in one are invisible to the other. kind clusters created in one context are invisible to kubectl in the other. `kind get clusters` returns empty from WSL2 while the cluster runs fine in Docker Desktop.
-
-**Why it happens:**
-Docker Desktop with WSL2 backend exposes the Docker socket into WSL2 distros, but only for the Docker Desktop daemon. A natively installed Docker Engine in WSL2 runs its own separate daemon on `/var/run/docker.sock`. `DOCKER_HOST` and Docker context determine which daemon each CLI call reaches.
-
-**How to avoid:**
-Choose one approach and document it in README. Recommended: Docker Desktop with WSL2 backend integration enabled (Settings → Resources → WSL Integration → enable for your distro). Do NOT install Docker Engine natively inside WSL2 alongside Docker Desktop. Verify with `docker context ls` — only one context should be active. All make targets run against the same Docker daemon.
-
-**Warning signs:**
-- `kind get clusters` returns empty in WSL2 terminal after successful `kind create cluster` in PowerShell
-- Images built with `docker build` are not found by `kind load docker-image`
-- `kubectl get nodes` returns "connection refused" even though the cluster was just created
-
-**Phase to address:** Phase: Cluster Setup — README prerequisite section
-
----
-
-### Pitfall 13: Helm chart `version` vs `appVersion` confusion causing stale deploys
-
-**What goes wrong:**
-You fix a bug in the Flask app, rebuild and push the image, run `helm upgrade`. But the running pods do not restart — the old version keeps serving. Or: `helm package` fails with "version already exists" because `version` in Chart.yaml was not bumped.
-
-**Why it happens:**
-Helm's `version` field tracks the chart packaging version. `appVersion` is metadata only — it does not control which image is deployed. The image tag in `values.yaml` controls that. If you rebuild `myapp:0.1.0` and push a new image under the same tag, `helm upgrade` sees no change in the chart spec and may not restart pods. Additionally, Helm chart repos reject packages with duplicate `version` values.
-
-**How to avoid:**
-- Use mutable-tag + explicit `helm upgrade --recreate-pods` OR use immutable image tags (increment tag on every build: `0.1.0`, `0.1.1`)
-- In PRD-1, use a `BUILD_TAG` variable (e.g., git short SHA or timestamp) in Makefile: `docker build -t localhost:5001/field-guide-api:$(shell git rev-parse --short HEAD)`
-- Set `image.tag` in `values.yaml` to `latest` as default, override via `--set image.tag=$(BUILD_TAG)` in the `make deploy` target
-- Bump `version` in Chart.yaml whenever chart templates change; bump `appVersion` when the app version changes
-
-**Warning signs:**
-- `helm upgrade` exits 0 but pod does not restart (no `MODIFIED` in `kubectl get pods -w`)
-- Running container still shows old response after upgrade
-- `helm package` fails with "Error: file already exists"
-
-**Phase to address:** Phase: Helm chart + Makefile deploy target
+**Phase to address:** Phase: Launchpad Helm chart and MongoDB wiring
 
 ---
 
@@ -340,13 +336,13 @@ Helm's `version` field tracks the chart packaging version. `appVersion` is metad
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| `imagePullPolicy: Always` with `:latest` | No need to tag builds | Cluster always tries remote pull; breaks offline | Never for kind local dev |
-| Hardcoding `MONGO_URI` in Deployment env | Quick wiring | Breaks PRD-3 templating; secret in manifest | Never |
-| `flask run` in Dockerfile CMD | Fast to write | Dev server in prod; no graceful shutdown | Never |
-| Skipping resource `limits` in Helm chart | Simpler chart | OOM kills entire kind node in low-memory scenarios | Only during initial scaffold, fix before first deploy |
-| Bitnami MongoDB chart with latest bitnami image | One-liner chart dep | Breaks on fresh cluster post-Aug 2025 | Never for new projects |
-| Single-process gunicorn (`--workers 1`) | Avoids prometheus multiproc complexity | Not representative of production; PRD-4 will need fix | Acceptable for PRD-1; must document |
-| No `.gitattributes` | Fewer files to maintain | CRLF scripts fail inside containers silently | Never |
+| Calling `load_incluster_config()` at module level | One-line K8s setup | Test suite crashes outside cluster; forces mock complexity | Never — always lazy-init inside a function |
+| `hx-trigger="every 2s"` on status cards | Snappier feeling UI | Worker starvation with >1 browser tab; masks K8s timeout problems | Never below 10s on routes doing real I/O |
+| Reusing `IMAGE`, `RELEASE`, `CHART` Makefile variables for both apps | Minimal Makefile changes | Deploying one app silently skips the other; smoke test targets wrong service | Never — namespace variables from the start |
+| Unindexed `platform_events` collection without `.limit()` | Fast to write | Full collection scan; demo slows after 1 hour of use | Never — add TTL index and `.limit()` before first insert |
+| Dashboard `/health` calling field-guide-api's `/health` | Looks like a real health check | readinessProbe cascade; dashboard goes NotReady when field-guide-api restarts | Never — liveness/readiness must be scoped to the pod's own dependencies |
+| Copying `mongoDbName: fieldguide` into the launchpad chart unchanged | Faster scaffolding | Silent data collision between two apps in shared MongoDB | Never — set `mongoDbName: launchpad` from the start |
+| Vendoring `htmx.min.js` without pinning the version in a comment | Simpler static folder | Next developer doesn't know which version is vendored; 1.x vs 2.x has breaking API changes | Acceptable if the version is documented in a comment at the top of the file |
 
 ---
 
@@ -354,12 +350,24 @@ Helm's `version` field tracks the chart packaging version. `appVersion` is metad
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| kind ↔ local registry | Assume localhost:5001 works without containerd mirror config | Run official kind-with-registry script that patches each node's `hosts.toml` |
-| Flask ↔ MongoDB | Omit `authSource=admin` in connection string | Always append `?authSource=admin` when using root user |
-| gunicorn ↔ prometheus_client | Default single-process mode with multiple workers | Use `--workers 1` for PRD-1; add `PROMETHEUS_MULTIPROC_DIR` when scaling |
-| Helm ↔ Kubernetes Secret | Store password in `values.yaml` | Use `auth.existingSecret` or a Secret template with `secretKeyRef` in Deployment |
-| Makefile ↔ Git Bash | Missing `MSYS_NO_PATHCONV=1` on docker `-v` flags | Export at Makefile top or prefix individual targets |
-| kind ↔ Docker Desktop | Two Docker daemons coexisting | Pick one, verify with `docker context ls`, document in README |
+| kubernetes Python client | No `_request_timeout` on API calls | Always pass `_request_timeout=5` to every client method call |
+| kubernetes Python client | `load_incluster_config()` at import time | Lazy-init inside `get_k8s_client()` factory; catch `ConfigException` and return disabled mode |
+| htmx polling → Flask route | Polling an endpoint that does synchronous K8s/MongoDB I/O | Keep the polled endpoint under 3s; cache K8s results for the poll interval |
+| launchpad → field-guide-api MongoDB | Using wrong service hostname (launchpad chart's own helper instead of cross-chart name) | Hard-code the shared MongoDB service name as `field-guide-api-mongodb` in launchpad's `externalMongoUri` value |
+| Jinja2 + htmx | Returning full HTML from a fragment-only route | Check `request.headers.get("HX-Request")` and return appropriate template type |
+| ServiceAccount RBAC | Using ClusterRole instead of namespace-scoped Role | Create a `Role` in the `default` namespace with only `get/list` on `pods` and `services` — no ClusterRole needed for kind local dev |
+| mongomock in tests | Assuming mongomock enforces TTL and capped collection limits | Write separate integration tests against real mongo:7 for storage-behavior tests |
+
+---
+
+## Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Unbounded `platform_events` query | `/api/events` takes 1–2s to load after 1 day of use | TTL index + always `.limit(100).sort("created_at", -1)` | ~10k documents (minutes on a demo) |
+| htmx poll interval below 10s on I/O-bound route | Browser spinner; gunicorn timeouts; worker CRITICAL messages | Minimum 10s poll + visibility check + in-process cache | First time a second browser tab is opened |
+| K8s client without timeout on `/api/status` | Dashboard hangs when cluster paused; readinessProbe failures | `_request_timeout=5` on all calls; module-level result cache with 10s TTL | First laptop sleep/wake cycle during a demo |
+| Flask `render_template` with large context objects | HTML generation slow for events feed | Paginate: never pass >100 events to a template; use `.limit()` in the query | ~500 events in the template context |
 
 ---
 
@@ -367,25 +375,35 @@ Helm's `version` field tracks the chart packaging version. `appVersion` is metad
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| MongoDB root password in `values.yaml` committed to git | Permanent credential exposure in git history | Create a Kubernetes Secret separately; reference via `auth.existingSecret` or `secretKeyRef` |
-| `.env` committed before `.gitignore` | Credentials in git history forever | `.gitignore` as first commit; `pre-commit` hook to block `.env` |
-| `debug=True` in Flask Dockerfile | Exposes interactive debugger endpoint on `/` | Guard with `if __name__ == "__main__"` only; never in gunicorn CMD |
-| Running container as root | Full root access inside container if compromised | Add `USER 1000` in Dockerfile; set `securityContext.runAsNonRoot: true` in Helm chart |
-| kubeconfig committed to repo | Anyone with repo access can control the cluster | Add `kubeconfig` and `*.kubeconfig` to `.gitignore` before scaffold |
+| ClusterRole instead of namespace-scoped Role for launchpad ServiceAccount | If launchpad pod is compromised, attacker gets read access to all namespaces, all clusters | Use `Role` (namespace-scoped), not `ClusterRole`; bind only to `default` namespace |
+| ServiceAccount token auto-mounted on field-guide-api pod | Field-guide-api doesn't need K8s API access; token is an unnecessary attack surface | Set `automountServiceAccountToken: false` in the field-guide-api Helm chart Deployment spec |
+| Committing `apps/launchpad/.env` with MongoDB URI before `.gitignore` covers new app dir | Credentials in git history | Verify `.gitignore` covers `apps/launchpad/.env` before first commit in that directory |
+| Kubernetes RBAC verbs `*` on pods | Any pod operation (delete, exec) possible from inside launchpad pod | Restrict to `verbs: ["get", "list", "watch"]` only — no `create`, `delete`, `exec` |
+
+---
+
+## UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| htmx status card shows spinner during every 5s poll | Dashboard flickers every 5 seconds; feels broken | Use `hx-indicator` on a small spinner icon, not the entire card; swap only the inner data, not the card shell |
+| Degraded K8s status shown as a red error state | Reviewer thinks the platform is broken when the cluster is just local | Use a "degraded" yellow state with message "K8s API unavailable — running outside cluster" for graceful fallback |
+| Events feed shows raw timestamps (UTC epoch) | Hard to read during a demo | Format as relative time ("2 minutes ago") in Jinja2 using a custom filter |
+| Service registration form accepts empty names | Invalid data in MongoDB; confusing list state | Client-side required attribute + server-side validation before insert |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Registry wiring:** `docker push localhost:5001/app:tag` succeeds AND `kubectl run test --image=localhost:5001/app:tag` also succeeds — verify BOTH
-- [ ] **Graceful shutdown:** `kubectl delete pod <pod>` completes within 10 seconds — if it takes 30s, gunicorn is not receiving SIGTERM
-- [ ] **MongoDB auth:** Flask logs show successful DB connection after pod start, not just "MongoDB pod is Running"
-- [ ] **Makefile targets:** Every target tested in Git Bash AND WSL2, not just one shell
-- [ ] **Secrets not committed:** `git log --all -- .env` returns nothing; `grep -r "password" charts/` returns only template refs, not literal values
-- [ ] **imagePullPolicy:** Helm chart deployment template explicitly sets `imagePullPolicy: IfNotPresent`, not relying on default
-- [ ] **CRLF:** `file scripts/*.sh` shows "ASCII text" with no "CRLF" in WSL2
-- [ ] **Resource limits:** `kubectl describe pod <app>` shows non-empty `Limits` section
-- [ ] **Bitnami image pull:** Fresh `make cluster-up && make deploy` on a machine that has never pulled the MongoDB image succeeds without credentials
+- [ ] **K8s client graceful degradation:** `make test` passes with zero kubernetes calls; `KUBERNETES_SERVICE_HOST` is unset and the dashboard still starts
+- [ ] **MongoDB database isolation:** `kubectl exec <mongodb-pod> -- mongosh --eval "db.adminCommand({listDatabases:1})"` shows both `fieldguide` and `launchpad` as separate databases
+- [ ] **htmx fragment safety:** Direct browser navigation to `/api/status` (no htmx context) returns a usable full page, not a bare div
+- [ ] **Events TTL index:** `db.launchpad.platform_events.getIndexes()` shows a TTL index on `created_at`; queries always use `.limit()`
+- [ ] **Port-forward isolation:** `make port-forward-launchpad` uses port 8081, not 8080; both port-forward targets can run simultaneously without conflict
+- [ ] **Makefile target clarity:** `make build` alone fails with a helpful error or does not exist — must be `make build-fga` or `make build-launchpad`
+- [ ] **RBAC scope:** `kubectl get role -n default` shows a namespace-scoped Role for launchpad; `kubectl get clusterrole | grep launchpad` returns nothing
+- [ ] **Worker timeout resilience:** Kill the kind API server process (`docker pause kind-control-plane`) and confirm the dashboard responds with a degraded status within 6s, not a hung worker
+- [ ] **Poll visibility:** Opening a second browser tab does not double the gunicorn request rate — verify with `kubectl logs -f <launchpad-pod>` while switching between two open tabs
 
 ---
 
@@ -393,13 +411,13 @@ Helm's `version` field tracks the chart packaging version. `appVersion` is metad
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Registry not reachable from nodes | MEDIUM | Delete and recreate cluster with correct kind config; re-run registry script |
-| CRLF in scripts after first commit | MEDIUM | Add `.gitattributes`, run `git add --renormalize .`, recommit affected scripts |
-| Secret committed to git | HIGH | `git filter-repo --path .env --invert-paths`; rotate ALL credentials in the secret; notify collaborators to re-clone |
-| Wrong Bitnami chart image | LOW | Switch to `mongo:7.0` official image; rewrite Helm dependency or Deployment; no data loss if cluster is ephemeral |
-| imagePullPolicy:Always causing pull failures | LOW | Edit `values.yaml` / Helm template; `helm upgrade` |
-| Makefile spaces instead of tabs | LOW | Re-open in editor with "show whitespace" enabled; replace; verify with `cat -A Makefile` |
-| Two Docker daemons | MEDIUM | `docker context use <correct-context>`; recreate kind cluster in correct context |
+| Makefile variable collision discovered mid-milestone | MEDIUM | Rename variables to namespaced form; update all targets; run `make up` end-to-end to verify |
+| Selector label collision (wrong pods behind Service) | MEDIUM | `helm uninstall` both releases; fix `_helpers.tpl`; `helm install` in order; verify endpoints |
+| K8s client hanging workers discovered in demo | LOW | Add `_request_timeout=5` to all client calls; restart pod; no data loss |
+| `platform_events` collection unbounded (already has 100k docs) | MEDIUM | Create TTL index (`create_index` on existing collection is non-blocking on small datasets); add `.limit()` to all queries; consider a one-time cleanup script |
+| MongoDB database collision (launchpad wrote to `fieldguide`) | HIGH | Drop contaminated collections in `fieldguide`; fix `mongoDbName` in chart values; redeploy; accept data loss (local kind only) |
+| Fragment URL bookmarked without full-page fallback | LOW | Add `HX-Request` check to route; no data loss; retested in 10 minutes |
+| `load_incluster_config()` at module level blocking tests | LOW | Move to lazy factory function; tests unblocked immediately |
 
 ---
 
@@ -407,36 +425,40 @@ Helm's `version` field tracks the chart packaging version. `appVersion` is metad
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| CRLF line endings | Phase 1: Repo scaffold (`.gitattributes` first commit) | `file scripts/*.sh` in WSL2 shows no CRLF |
-| Secrets committed before .gitignore | Phase 1: Repo scaffold | `git log --all -- .env` returns nothing |
-| Docker daemon split (Desktop vs WSL2) | Phase 2: Cluster setup (README prerequisites) | `docker context ls` shows one active context |
-| kind registry containerd wiring | Phase 2: Cluster setup (kind+registry script) | `kubectl run --image=localhost:5001/test:tag` pulls successfully |
-| imagePullPolicy:Always + :latest | Phase 3: Helm chart authoring | Chart template has explicit `imagePullPolicy: IfNotPresent` |
-| Bitnami MongoDB image unavailability | Phase 4: MongoDB deployment | Fresh cluster + `make deploy` pulls mongo image without error |
-| MongoDB authSource mismatch | Phase 4: MongoDB + Flask integration | Flask logs show "Connected to MongoDB" on pod start |
-| MongoDB data loss on cluster-down | Phase 4: MongoDB deployment (documentation + seed target) | README documents ephemeral behavior; `make seed` exists |
-| Flask dev server in Dockerfile | Phase 3: Containerization | Dockerfile CMD uses `gunicorn`; `docker inspect` confirms |
-| prometheus_client multiprocess | Phase 3: Containerization (defer full fix to PRD-4) | `--workers 1` documented; PRD-4 backlog item created |
-| MSYS path mangling | Phase 2+5: Cluster setup + Makefile | All `make` targets pass in Git Bash without path errors |
-| Makefile tabs + shell | Phase 5: Makefile scaffold | `make -n cluster-up` exits 0 in both shells; no separator errors |
-| Helm version/appVersion confusion | Phase 3: Helm chart + deploy target | New image tag triggers pod replacement; stale image not served |
-| Secrets in Helm values.yaml | Phase 3: Helm chart | `grep -r password charts/` returns only `secretKeyRef` references |
+| Makefile variable collision | Phase: Monorepo scaffold — first task before any code | `make help` shows namespaced targets; `make deploy-fga` and `make deploy-launchpad` deploy distinct releases |
+| Helm Service selector collision | Phase: Launchpad Helm chart scaffold | `kubectl get endpoints` shows correct pod IPs for each Service |
+| K8s client blocking gunicorn worker | Phase: K8s API diagnostics | `_request_timeout=5` present on all client calls; confirmed via code review |
+| `load_incluster_config` at import time | Phase: K8s API diagnostics — establish lazy-init factory first | `make test` passes without `KUBERNETES_SERVICE_HOST` set |
+| Dashboard `/health` cascading failure | Phase: Launchpad app scaffold + `/health` endpoint | `/health` only pings MongoDB; `/api/status` is separate and not probed |
+| htmx polling + K8s I/O starvation | Phase: htmx UI and status polling | Poll interval ≥ 10s; visibility guard present; confirmed by log inspection |
+| Unbounded events collection | Phase: Activity feed and MongoDB schema | TTL index confirmed in mongosh; `.limit()` in all queries; tests assert index existence |
+| Shared MongoDB DB name collision | Phase: Launchpad app factory | `app.config["MONGO_DBNAME"]` logs `launchpad` not `fieldguide` on startup |
+| htmx fragment vs full-page confusion | Phase: Jinja2 template structure | Direct browser navigation to fragment URLs returns full page |
+| Port-forward collision | Phase: Makefile extension | Both port-forward targets run simultaneously on distinct ports |
+| mongomock gap for TTL/capped | Phase: Activity feed test design | `conftest.py` documents limitation; index existence test added |
+| Cross-chart MongoDB hostname wiring | Phase: Launchpad Helm chart and MongoDB wiring | `kubectl exec <launchpad-pod> -- env | grep MONGO` shows correct URI |
 
 ---
 
 ## Sources
 
-- [kind Local Registry official docs](https://kind.sigs.k8s.io/docs/user/local-registry/)
-- [kind WSL2 docs](https://kind.sigs.k8s.io/docs/user/using-wsl2/)
-- [KiND — How I Wasted a Day Loading Local Docker Images (iximiuz)](https://iximiuz.com/en/posts/kubernetes-kind-load-docker-image/)
-- [Bitnami catalog deprecation announcement — Issue #35164](https://github.com/bitnami/charts/issues/35164)
-- [Bitnami MongoDB Helm dependency broken — LibreChat Discussion #10255](https://github.com/danny-avila/LibreChat/discussions/10255)
-- [Docker and Git Bash / MSYS2 path conversion workaround (GitHub Gist)](https://gist.github.com/borekb/cb1536a3685ca6fc0ad9a028e6a959e3)
-- [Prometheus multiprocess mode official docs](https://prometheus.github.io/client_python/multiprocess/)
-- [CRLF line endings breaking CI (iotools)](https://iotools.cloud/journal/crlf-vs-lf-line-ending-bug-ci/)
-- [12 Helm Chart Mistakes — DevOps Training Institute](https://www.devopstraininginstitute.com/blog/12-helm-chart-mistakes-how-to-fix-them)
-- [kind Issue #2665 — localhost:5000 not reachable](https://github.com/kubernetes-sigs/kind/issues/2665)
+- v1.0 Makefile (`E:/Genspark/k8s-launchpad/Makefile`) — existing variable/target names that would collide
+- v1.0 `_helpers.tpl` (`charts/field-guide-api/templates/_helpers.tpl`) — selectorLabels pattern that must be replicated, not shared
+- v1.0 `conftest.py` — mongomock monkeypatching pattern; basis for K8s client mock strategy
+- v1.0 `health.py` — readiness probe design pattern: scope to own MongoDB, not downstream services
+- v1.0 `app/__init__.py` — app factory pattern; kubernetes client must follow same lazy-init discipline
+- [kubernetes-client/python: in_cluster_config.py example](https://github.com/kubernetes-client/python/blob/master/examples/in_cluster_config.py) — shows absence of fallback handling; ConfigException documented in issue #992
+- [kubernetes-client/python: timeout-settings.md](https://github.com/kubernetes-client/python/blob/master/examples/watch/timeout-settings.md) — `_request_timeout` is the correct parameter; no default means infinite wait
+- [htmx hx-trigger attribute docs](https://htmx.org/attributes/hx-trigger/) — `every` polling syntax; HTTP 286 stop-polling mechanism; no built-in visibility guard
+- [htmx template fragments essay](https://htmx.org/essays/template-fragments/) — fragment vs full-page route design
+- [htmx hx-boost fragment issue #497](https://github.com/bigskysoftware/htmx/discussions/2543) — browser restore of fragment URLs as broken page
+- [MongoDB TTL Indexes official docs v7.0](https://www.mongodb.com/docs/v7.0/core/index-ttl/) — TTL index behavior, 60s background cleanup cadence
+- [MongoDB Capped Collections](https://www.mongodb.com/docs/manual/core/capped-collections/) — mutual exclusivity with TTL indexes
+- [API health checks for graceful vs cascading failure](https://klotzandrew.com/blog/api-health-checks-for-graceful-or-cascading-failure/) — cascading failure pattern documented
+- [Kubernetes RBAC Good Practices](https://kubernetes.io/docs/concepts/security/rbac-good-practices/) — Role vs ClusterRole; automountServiceAccountToken
+- [mongomock unit test pattern — flask-mongomock-example](https://github.com/alkc/flask-mongomock-example) — confirmed mongomock does not enforce TTL or capped constraints
+- [gunicorn worker timeout issues](https://github.com/benoitc/gunicorn/issues/1655) — blocking IO (no client timeout) not detected by gunicorn until `--timeout` fires
 
 ---
-*Pitfalls research for: kind + Helm + Flask + MongoDB on Windows/WSL2 (k8s-launchpad PRD-1)*
-*Researched: 2026-07-04*
+*Pitfalls research for: Flask+htmx dashboard + K8s API diagnostics + shared MongoDB (k8s-launchpad v1.1 Product Dashboard)*
+*Researched: 2026-07-08*

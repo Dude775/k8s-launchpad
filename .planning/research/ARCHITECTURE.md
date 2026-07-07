@@ -1,441 +1,582 @@
 # Architecture Research
 
-**Domain:** Local Kubernetes Internal Developer Platform — foundation layer (PRD-1)
-**Researched:** 2026-07-04
-**Confidence:** HIGH (verified against kind official docs, Helm Context7, Flask Context7)
+**Domain:** Local Kubernetes Internal Developer Platform — v1.1 Product Dashboard (PRD-3)
+**Researched:** 2026-07-08
+**Confidence:** HIGH (derived from live codebase inspection + K8s in-cluster config docs)
+
+---
 
 ## Standard Architecture
 
-### System Overview
+### System Overview — v1.1 (two-app state)
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         DEV MACHINE (host)                           │
-│                                                                       │
-│  ┌──────────────┐   docker build    ┌───────────────────────────┐   │
-│  │ Flask source │ ───────────────►  │    Docker daemon          │   │
-│  │ apps/        │                   │    (image store)          │   │
-│  └──────────────┘                   └────────────┬──────────────┘   │
-│                                                  │ docker push       │
-│  ┌──────────────┐   helm install   ┌─────────────▼──────────────┐   │
-│  │  Helm chart  │ ──────────────►  │  Local Registry container  │   │
-│  │  charts/     │                  │  registry:2 @ :5001        │   │
-│  └──────────────┘                  └─────────────┬──────────────┘   │
-│                                                  │ Docker network    │
-│  ┌──────────────┐   kind create    ┌─────────────▼──────────────┐   │
-│  │  infra/kind/ │ ──────────────►  │     kind cluster node      │   │
-│  │  cluster.yaml│                  │  (Docker container)        │   │
-│  └──────────────┘                  │  containerd pulls from     │   │
-│                                    │  localhost:5001 via network │   │
-│                                    └──────────┬─────────────────┘   │
-└───────────────────────────────────────────────┼─────────────────────┘
-                                                │
-                              ┌─────────────────▼──────────────────┐
-                              │        KIND CLUSTER                  │
-                              │  ┌────────────────────────────┐     │
-                              │  │   field-guide-api pod       │     │
-                              │  │   Flask app :5000           │ ◄── curl
-                              │  └──────────────┬─────────────┘     │
-                              │                 │ mongodb://          │
-                              │                 │ mongodb-svc:27017   │
-                              │  ┌──────────────▼─────────────┐     │
-                              │  │   MongoDB pod               │     │
-                              │  │   Helm dependency :27017    │     │
-                              │  └────────────────────────────┘     │
-                              └────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│                         DEV MACHINE (host)                                  │
+│                                                                              │
+│  make build          make build-launchpad                                   │
+│  docker build        docker build                                            │
+│  apps/field-guide-api/    apps/launchpad/                                   │
+│         │                        │                                           │
+│         └──────────┬─────────────┘                                          │
+│                    ▼                                                          │
+│         docker push localhost:5001/...                                       │
+│                    │                                                          │
+│          ┌─────────▼──────────┐                                             │
+│          │  Local Registry     │  registry:3 @ localhost:5001                │
+│          └─────────┬──────────┘                                             │
+│                    │ Docker network (kind)                                   │
+└────────────────────┼────────────────────────────────────────────────────────┘
+                     │
+        ┌────────────▼────────────────────────────────────────────┐
+        │                  KIND CLUSTER (default namespace)         │
+        │                                                           │
+        │  ┌───────────────────┐    ┌───────────────────────────┐  │
+        │  │  field-guide-api   │    │       launchpad            │  │
+        │  │  pod :8000         │    │       pod :8000            │  │
+        │  │  Flask REST API    │◄───│  HTTP GET /health          │  │
+        │  └────────┬──────────┘    │  (ClusterIP DNS)           │  │
+        │           │ MONGO_URI      └──────────┬────────────────┘  │
+        │           │                           │ MONGO_URI          │
+        │  ┌────────▼──────────┐    ┌──────────▼────────────────┐  │
+        │  │  field-guide-api   │    │  launchpad-mongodb         │  │
+        │  │  -mongodb pod      │    │  pod :27017               │  │
+        │  │  mongo:7           │    │  mongo:7                  │  │
+        │  └───────────────────┘    └───────────────────────────┘  │
+        │                                        │                   │
+        │                           ┌────────────▼────────────────┐ │
+        │                           │  K8s API server              │ │
+        │                           │  https://kubernetes.default  │ │
+        │                           │  ◄── launchpad ServiceAccount│ │
+        │                           │       (read-only RBAC)       │ │
+        │                           └─────────────────────────────┘ │
+        └───────────────────────────────────────────────────────────┘
 ```
 
 ### Component Responsibilities
 
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| `apps/field-guide-api/` | Flask REST API — CRUD for DevOps entries | App factory pattern, blueprints, env-based config |
-| `charts/field-guide-api/` | Helm chart packaging the app for K8s | Deployment + Service + ConfigMap + Secret template |
-| `infra/kind/` | Cluster definition + registry bootstrap | `cluster.yaml` + `scripts/kind-with-registry.sh` |
-| Local registry container | Layer-efficient image store accessible to kind nodes | `registry:2` Docker container on host, port 5001 |
-| kind node (containerd) | Pull images from local registry, run pods | Configured via `hosts.toml` to resolve `localhost:5001` |
-| MongoDB pod | Persistent data store for entries | Helm dependency (Bitnami MongoDB chart) or standalone manifest |
-| `Makefile` | Developer interface — orchestrates all above | `.PHONY` targets with explicit dependency chains |
+| Component | Responsibility | Status |
+|-----------|----------------|--------|
+| `apps/field-guide-api/` | Flask REST API for DevOps knowledge entries | v1.0 — UNTOUCHED |
+| `charts/field-guide-api/` | Helm chart: Deployment + Service + ConfigMap + Secret + MongoDB manifests | v1.0 — UNTOUCHED |
+| `apps/launchpad/` | Platform dashboard Flask app: UI shell, status API, service catalog, events feed, K8s diagnostics | NEW in v1.1 |
+| `charts/launchpad/` | Helm chart for launchpad: Deployment + Service + ConfigMap + Secret + MongoDB manifests + RBAC manifests | NEW in v1.1 |
+| `Makefile` | Developer CLI — add LP_ variable block + launchpad-specific targets + `up-all` composite | MODIFIED in v1.1 |
+| `infra/kind/` | Cluster definition + registry bootstrap | v1.0 — UNTOUCHED |
+| `scripts/` | Shell scripts (cluster-setup.sh, cluster-teardown.sh) | v1.0 — UNTOUCHED |
 
-## Recommended Project Structure
+---
+
+## Repository Tree: New vs Modified vs Untouched
 
 ```
 k8s-launchpad/
 ├── apps/
-│   └── field-guide-api/
-│       ├── src/
-│       │   ├── __init__.py        # create_app() factory — entry point
-│       │   ├── config.py          # Config classes reading from env vars
-│       │   ├── extensions.py      # PyMongo (and future) extension init
-│       │   └── blueprints/
-│       │       ├── entries.py     # GET /entries, GET /entries/<id>, POST /entries
-│       │       └── health.py      # GET /health, GET /metrics
-│       ├── tests/
-│       │   ├── conftest.py        # create_app(test_config=...) fixture
-│       │   └── test_entries.py    # unit tests for blueprint routes
+│   ├── field-guide-api/       ← UNTOUCHED (zero changes)
+│   └── launchpad/             ← NEW
 │       ├── Dockerfile
-│       └── requirements.txt
+│       ├── requirements.txt
+│       ├── requirements-dev.txt
+│       ├── pytest.ini
+│       ├── .env.example
+│       ├── .dockerignore
+│       ├── wsgi.py
+│       ├── app/
+│       │   ├── __init__.py    # create_app factory (same pattern as field-guide-api)
+│       │   ├── config.py      # Config: MONGO_URI, FIELD_GUIDE_URL, K8S_NAMESPACE
+│       │   ├── extensions.py  # mongo (Flask-PyMongo)
+│       │   ├── k8s.py         # K8s client init: in-cluster → kubeconfig → None
+│       │   └── routes/
+│       │       ├── __init__.py
+│       │       ├── ui.py      # Jinja2 routes: GET /, /services, /diagnostics
+│       │       ├── status.py  # GET /health, GET /api/status
+│       │       ├── services.py # GET/POST/DELETE /api/services
+│       │       └── events.py  # GET /api/events, POST /api/events
+│       ├── app/static/        # vendored htmx.min.js, CSS
+│       ├── app/templates/     # Jinja2 HTML: base.html, index.html, services.html, ...
+│       └── tests/
+│           └── conftest.py    # create_app fixture, mock K8s client, mock requests
+│
 ├── charts/
-│   └── field-guide-api/
-│       ├── Chart.yaml             # name, version, appVersion; lists MongoDB dep
-│       ├── values.yaml            # generic seam — every configurable knob here
-│       ├── charts/                # vendored Helm dependencies (mongodb)
+│   ├── field-guide-api/       ← UNTOUCHED (zero changes — critical constraint)
+│   └── launchpad/             ← NEW
+│       ├── Chart.yaml
+│       ├── values.yaml
 │       └── templates/
+│           ├── _helpers.tpl   # launchpad.fullname, launchpad.mongodb.fullname, etc.
 │           ├── deployment.yaml
 │           ├── service.yaml
 │           ├── configmap.yaml
-│           └── secret.yaml        # template only — real values from values.yaml
-├── infra/
-│   ├── kind/
-│   │   └── cluster.yaml           # kind Cluster config with containerd patch
-│   ├── argocd/                    # empty — reserved for PRD-2
-│   └── observability/             # empty — reserved for PRD-4
-├── scripts/
-│   └── kind-with-registry.sh      # idempotent: create registry + cluster + connect
-├── docs/
-│   └── local-setup.md             # clone → make cluster-up → make deploy → curl
-├── Makefile                        # primary developer interface
-├── .env.example
-├── .gitignore
-└── README.md
+│           ├── secret.yaml    # MONGO_URI only (same pattern as field-guide-api)
+│           ├── NOTES.txt
+│           ├── rbac/          ← NEW (no equivalent in field-guide-api chart)
+│           │   ├── serviceaccount.yaml
+│           │   ├── role.yaml
+│           │   └── rolebinding.yaml
+│           └── mongodb/       # same pattern as charts/field-guide-api/templates/mongodb/
+│               ├── deployment.yaml
+│               ├── service.yaml
+│               ├── pvc.yaml
+│               └── secret.yaml
+│
+├── infra/                     ← UNTOUCHED
+├── scripts/                   ← UNTOUCHED
+├── Makefile                   ← MODIFIED (LP_ variable block + 6 new targets)
+└── README.md                  ← MODIFIED (dashboard demo flow + screenshot placeholders)
 ```
 
-### Structure Rationale
+---
 
-- **`apps/` prefix:** Mirrors the multi-app IDP pattern; PRD-3 will add `apps/platform-dashboard/`. Signals each directory is a deployable unit.
-- **`src/` inside the app:** Separates importable Python package from Docker/test artifacts; `pytest` discovers tests cleanly without importing Docker build context.
-- **`blueprints/` not `routes/`:** Flask naming convention; keeps `entries` and `health` concerns fully isolated — health blueprint has zero MongoDB dependency.
-- **`infra/` subdirectories reserved:** `argocd/` and `observability/` exist as empty dirs (with `.gitkeep`) so directory layout signals future intent to reviewers.
-- **`scripts/` for shell, `Makefile` for targets:** Shell handles multi-step stateful operations (registry bootstrap); Makefile provides the CLI contract. Separation keeps Makefile readable.
+## Architectural Patterns for v1.1
 
-## Architectural Patterns
+### Pattern 1: Separate MongoDB per Chart (Ownership Decision)
 
-### Pattern 1: App Factory (Flask)
+**What:** Each Helm chart embeds its own MongoDB manifests and owns its own PVC. The launchpad chart deploys a second `mongo:7` pod using the same `templates/mongodb/` subdirectory pattern established in `charts/field-guide-api/`.
 
-**What:** `create_app()` function instantiates and configures the Flask app. Extensions and blueprints are registered inside the factory, never at module level.
+**Decision rationale — why not a shared MongoDB instance:**
 
-**When to use:** Always with Flask. Required for testing (create multiple app instances with different configs), required for the extensions (PyMongo) to work correctly without circular imports.
+| Option | What changes | Why rejected |
+|--------|-------------|-------------|
+| Shared MongoDB (third Helm release) | field-guide-api chart must be modified to `mongodb.enabled=false` + `externalMongoUri=...`; new `charts/mongodb/` release; Makefile deploy ordering becomes three-step with explicit dependency | Breaks the clean v1.0 chart; adds a deploy dependency that complicates `make up-all`; field-guide-api's `externalMongoUri` seam exists for this but using it means the working v1.0 chart is modified |
+| Separate MongoDB per chart (CHOSEN) | launchpad gets its own `mongo:7` pod + PVC; databases are `fieldguide` (field-guide-api) and `launchpad` (launchpad); no cross-chart dependency | field-guide-api chart is zero-touch; each chart is independently installable/uninstallable; two pods is acceptable on a local kind cluster |
 
-**Trade-offs:** Slightly more setup than a flat `app.py`; pays off immediately when writing pytest fixtures.
+**Database layout:**
+- `field-guide-api-mongodb` pod → database `fieldguide` → collections: `entries`
+- `launchpad-mongodb` pod → database `launchpad` → collections: `services`, `events`
 
-**Example:**
-```python
-# src/__init__.py
-from flask import Flask
-from .extensions import mongo
-from .blueprints.entries import entries_bp
-from .blueprints.health import health_bp
-
-def create_app(test_config=None):
-    app = Flask(__name__)
-    app.config.from_object("src.config.Config")
-    if test_config:
-        app.config.update(test_config)
-
-    mongo.init_app(app)
-
-    app.register_blueprint(entries_bp, url_prefix="/api")
-    app.register_blueprint(health_bp)
-
-    return app
-
-# src/config.py
-import os
-
-class Config:
-    MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/fieldguide")
-    LOG_LEVEL  = os.environ.get("LOG_LEVEL", "INFO")
-```
-
-### Pattern 2: Local Registry (preferred over `kind load`)
-
-**What:** A `registry:2` Docker container runs on the host. kind nodes are configured via `hosts.toml` to resolve `localhost:5001` through the Docker network to the registry container. The workflow is `docker build → docker push localhost:5001/app:tag → Helm deploy`.
-
-**When to use:** PRD-1 and beyond. Preferred over `kind load docker-image` for this project.
-
-**Why preferred over `kind load`:**
-- `imagePullPolicy: Always` works correctly — mirrors production pull behavior
-- Incremental pushes skip already-uploaded layers (faster iteration after first push)
-- ArgoCD (PRD-2) and the platform dashboard (PRD-3) both assume a registry exists; building the habit now eliminates a future migration
-- `kind load` has a known footgun: if the image is tagged `latest`, K8s defaults to `imagePullPolicy: Always` and the cluster tries to pull from Docker Hub, failing silently
-
-**Trade-offs:** One extra component to bootstrap (the registry container). Mitigated by the idempotent `kind-with-registry.sh` script.
-
-**Example (infra/kind/cluster.yaml):**
+**Helm values pattern (charts/launchpad/values.yaml):**
 ```yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-containerdConfigPatches:
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry]
-    config_path = "/etc/containerd/certs.d"
-```
-
-**Example (scripts/kind-with-registry.sh — key steps):**
-```bash
-# 1. Start registry if not running
-docker run -d --restart=always -p "127.0.0.1:5001:5000" --name kind-registry registry:2
-
-# 2. Create cluster
-kind create cluster --name k8s-launchpad --config infra/kind/cluster.yaml
-
-# 3. Configure containerd on each node to resolve localhost:5001
-for node in $(kind get nodes --name k8s-launchpad); do
-  docker exec "$node" mkdir -p /etc/containerd/certs.d/localhost:5001
-  printf '[host."http://kind-registry:5000"]\n' | \
-    docker exec -i "$node" tee /etc/containerd/certs.d/localhost:5001/hosts.toml
-done
-
-# 4. Connect registry to kind network
-docker network connect kind kind-registry 2>/dev/null || true
-```
-
-### Pattern 3: Generic Helm values.yaml (PRD-3 seam)
-
-**What:** All configurable knobs for the app are in `values.yaml` with clear grouping. Templates reference `.Values.*` — no hard-coded strings in templates. When PRD-3 onboards a new app, it forks or overrides this values file; it does not touch templates.
-
-**When to use:** Any chart that will be re-used or templated across multiple app instances.
-
-**Trade-offs:** Slightly more verbose values file up front; eliminates chart-per-app sprawl later.
-
-**Example (charts/field-guide-api/values.yaml):**
-```yaml
-# --- image ---
-image:
-  repository: localhost:5001/field-guide-api
-  tag: "0.1.0"
-  pullPolicy: IfNotPresent    # use Always when registry is running
-
-# --- scaling ---
-replicaCount: 1
-
-# --- networking ---
-service:
-  type: NodePort
-  port: 5000
-  nodePort: 30080             # fixed port for curl convenience during dev
-
-# --- config (non-secret, injected as ConfigMap) ---
-config:
-  logLevel: INFO
-
-# --- secrets (injected as K8s Secret) ---
-secrets:
-  mongoUri: ""                # override at deploy time; never hardcode
-
-# --- MongoDB dependency ---
 mongodb:
   enabled: true
+  image: mongo:7
   auth:
-    enabled: false            # disabled for local dev; PRD-4 enables TLS/auth
+    username: root
+    password: launchpad-dev-password   # local kind only; never a real credential
+    database: launchpad
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
 
-# --- PRD-4 seam ---
-metrics:
-  enabled: true               # app already exposes /metrics; scraping config added in PRD-4
-
-# --- resource limits (PRD-4 tuning) ---
-resources: {}
-
-# --- ingress (disabled until PRD-2/3) ---
-ingress:
-  enabled: false
+config:
+  mongoDbName: launchpad
+  fieldGuideUrl: "http://field-guide-api"  # ClusterIP DNS — same namespace
+  k8sNamespace: "default"
+  flaskDebug: ""
 ```
+
+The `externalMongoUri` seam in `charts/field-guide-api/values.yaml` remains in place and unused — available for future PRDs where a genuine shared DB is warranted.
+
+### Pattern 2: Service-to-Service via ClusterIP DNS
+
+**What:** The launchpad app calls the field-guide-api `/health` endpoint to report platform status. Both apps deploy in the `default` namespace, so the field-guide-api ClusterIP Service is reachable at `http://field-guide-api` (short DNS form — no namespace qualification needed within the same namespace).
+
+**In-cluster resolution chain:**
+```
+launchpad pod
+  → HTTP GET http://field-guide-api/health   (short DNS)
+  → kube-dns resolves to field-guide-api ClusterIP (port 80)
+  → field-guide-api pod :8000 /health
+  ← 200 {"status": "ok", ...}
+```
+
+**Config injection via ConfigMap:**
+```yaml
+# charts/launchpad/templates/configmap.yaml
+FIELD_GUIDE_URL: {{ .Values.config.fieldGuideUrl | quote }}
+# default: "http://field-guide-api"
+```
+
+**App-level graceful degradation (no cluster or field-guide-api down):**
+```python
+# apps/launchpad/app/routes/status.py
+import requests
+
+FIELD_GUIDE_URL = os.environ.get("FIELD_GUIDE_URL", "http://localhost:8080")
+
+def check_field_guide_health():
+    try:
+        r = requests.get(f"{FIELD_GUIDE_URL}/health", timeout=2)
+        return {"status": "ok", "code": r.status_code}
+    except requests.exceptions.RequestException:
+        return {"status": "unreachable"}
+```
+
+For local dev/tests: set `FIELD_GUIDE_URL=http://localhost:8080` in `.env`; if no port-forward is active, the check returns `"unreachable"` — UI shows degraded card, app does not crash.
+
+**Test isolation:** Mock `requests.get` in pytest via `monkeypatch` or `unittest.mock.patch`. Never hit a real network in unit tests.
+
+### Pattern 3: K8s API Access — In-Cluster Config with Kubeconfig Fallback
+
+**What:** The launchpad diagnostics section queries the K8s API for pod and Deployment status in the `default` namespace. The `kubernetes` Python client supports two config loading strategies; the app tries both in order.
+
+**Loading strategy (apps/launchpad/app/k8s.py):**
+```python
+from kubernetes import client, config
+from kubernetes.config import ConfigException
+
+def init_k8s_client():
+    """Returns (CoreV1Api, AppsV1Api) tuple or (None, None) on failure."""
+    try:
+        config.load_incluster_config()        # pod: mounted SA token
+    except ConfigException:
+        try:
+            config.load_kube_config()         # local dev: ~/.kube/config
+        except ConfigException:
+            return None, None                 # no config — degrade gracefully
+    return client.CoreV1Api(), client.AppsV1Api()
+```
+
+**In-cluster mechanics:** When the pod runs with a ServiceAccount that has the RBAC role, Kubernetes mounts the token at `/var/run/secrets/kubernetes.io/serviceaccount/token` and the CA at `.../ca.crt`. `load_incluster_config()` reads these automatically. The pod calls `https://kubernetes.default.svc.cluster.local`.
+
+**Local dev mechanics:** `load_kube_config()` reads `~/.kube/config`, which `make cluster-up` populates via `kind create cluster`. The developer's kubeconfig already points at the kind cluster.
+
+**Graceful degradation:** If `init_k8s_client()` returns `(None, None)`, all K8s-dependent routes return a `{"status": "unavailable", "reason": "no_cluster"}` response. The UI renders a degraded diagnostics card without crashing. This is the correct behavior for unit tests (no kubeconfig in CI) and local dev without a running cluster.
+
+**RBAC manifests (charts/launchpad/templates/rbac/):**
+
+```yaml
+# serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "launchpad.fullname" . }}-sa
+  labels: ...
+
+# role.yaml — namespace-scoped (Role, not ClusterRole)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "launchpad.fullname" . }}-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+
+# rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "launchpad.fullname" . }}-reader
+subjects:
+- kind: ServiceAccount
+  name: {{ include "launchpad.fullname" . }}-sa
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "launchpad.fullname" . }}-reader
+  apiGroup: rbac.authorization.k8s.io
+```
+
+The Deployment spec must include `serviceAccountName: {{ include "launchpad.fullname" . }}-sa` — without this, the pod uses the `default` ServiceAccount (which has no RBAC role) and `load_incluster_config()` succeeds but API calls return 403.
+
+**Namespace strategy:** `default` namespace for both apps. Role is namespace-scoped (not ClusterRole). The diagnostics section lists pods/deployments in `default` only — correct for this project's scope. A `K8S_NAMESPACE` ConfigMap key makes the target namespace configurable without changing templates.
+
+### Pattern 4: Makefile Extension — LP_ Variable Block + Named Targets
+
+**What:** Add a second variable block and named targets for the launchpad app. Existing targets (`build`, `load`, `deploy`, etc.) are untouched — they still refer to field-guide-api. New targets use `LP_` prefix for variables and `-launchpad` suffix for target names.
+
+**Why this over a parameterized APP variable:**
+- `make build APP=field-guide-api` changes the existing `make build` contract — breaks muscle memory and any scripts that call `make build`
+- Named targets are explicit in `make help` output — a reviewer sees both apps clearly
+- Git Bash / MSYS does not add complications from variable interpolation in multi-value targets
+- The v1.0 `make up` and `make smoke` chains continue to work unchanged
+
+**Additions to Makefile:**
+```makefile
+# Launchpad image coordinates — override with: make build-launchpad LP_TAG=v1.1
+LP_IMAGE   ?= localhost:5001/launchpad
+LP_TAG     ?= dev
+LP_RELEASE ?= launchpad
+LP_CHART   ?= charts/launchpad
+
+.PHONY: build-launchpad load-launchpad deploy-launchpad undeploy-launchpad \
+        port-forward-launchpad smoke-launchpad up-all test-launchpad
+
+build-launchpad: ## build the launchpad Docker image
+	docker build -t $(LP_IMAGE):$(LP_TAG) apps/launchpad
+
+load-launchpad: ## push launchpad image to the local kind registry
+	docker push $(LP_IMAGE):$(LP_TAG)
+
+deploy-launchpad: ## install or upgrade the launchpad Helm release
+	helm upgrade --install $(LP_RELEASE) $(LP_CHART) \
+		--set image.repository=$(LP_IMAGE) --set image.tag=$(LP_TAG) \
+		--wait --timeout 180s
+
+undeploy-launchpad: ## remove the launchpad Helm release
+	helm uninstall $(LP_RELEASE)
+
+port-forward-launchpad: ## forward svc/launchpad to localhost:8081 (Ctrl-C to stop)
+	kubectl port-forward svc/$(LP_RELEASE) 8081:80
+
+smoke-launchpad: ## smoke test the launchpad dashboard endpoints
+	# (same background port-forward + curl pattern as existing smoke target)
+	# checks: /, /health, /api/status
+
+test-launchpad: ## run launchpad pytest suite with coverage
+	cd apps/launchpad && \
+	{ [ -d .venv ] || $(PYTHON) -m venv .venv; } && \
+	VENV_PY=$$([ -x .venv/bin/python ] && echo .venv/bin/python || echo .venv/Scripts/python) && \
+	"$$VENV_PY" -m pip install -q -r requirements-dev.txt && \
+	"$$VENV_PY" -m pytest
+
+up-all: cluster-up build load deploy build-launchpad load-launchpad deploy-launchpad
+up-all: ## bring up full stack: cluster + both apps (field-guide-api + launchpad)
+```
+
+Port assignment: `port-forward` uses `localhost:8080` (field-guide-api, existing). `port-forward-launchpad` uses `localhost:8081` (no conflict).
+
+`.PHONY` declaration in the existing line must be extended to include all new targets. Git Bash and MSYS constraints are already handled by the existing `SHELL := /bin/bash` and `export MSYS_NO_PATHCONV=1` headers.
+
+---
 
 ## Data Flow
 
-### Build and Load Flow
+### Request Flow: Browser → Launchpad Dashboard
 
 ```
-Developer runs: make deploy
-      │
-      ▼
-docker build -t localhost:5001/field-guide-api:0.1.0 apps/field-guide-api/
-      │ (reads Dockerfile in apps/field-guide-api/)
-      ▼
-Docker daemon caches image layers locally
-      │
-      ▼
-docker push localhost:5001/field-guide-api:0.1.0
-      │ (pushes only new/changed layers)
-      ▼
-Local registry container (127.0.0.1:5001) stores layers
-      │
-      ▼
-helm upgrade --install field-guide-api charts/field-guide-api/ --set image.tag=0.1.0
-      │ (renders templates against values.yaml)
-      ▼
-Kubernetes Deployment created in kind cluster
-      │
-      ▼
-kubelet (containerd) on kind node pulls from localhost:5001/field-guide-api:0.1.0
-      │ (resolved via hosts.toml → http://kind-registry:5000)
-      ▼
-Pod scheduled and running
+Browser GET http://localhost:8081/
+    │  (kubectl port-forward svc/launchpad 8081:80 active)
+    ▼
+launchpad ClusterIP Service (port 80 → targetPort 8000)
+    ▼
+launchpad pod (gunicorn :8000)
+    │  Jinja2 route: ui.py GET /
+    ▼
+status.py: check_field_guide_health()
+    │  HTTP GET http://field-guide-api/health (ClusterIP DNS, 2s timeout)
+    ▼
+field-guide-api pod :8000 /health → 200 {"status": "ok"}
+    │
+k8s.py: list_namespaced_pod(namespace="default")
+    │  HTTPS kubernetes.default.svc.cluster.local (SA token)
+    ▼
+K8s API → pod list in default namespace
+    │
+mongo: db.services.find(), db.events.find()
+    ▼
+launchpad-mongodb ClusterIP Service :27017
+    ▼
+launchpad-mongodb pod → launchpad database
+    │
+    ◄── Jinja2 renders index.html with status cards + service list
+    ◄── HTTP 200 HTML response to browser
 ```
 
-### Request Flow (app pod → MongoDB)
+### Graceful Degradation Flow (local dev, no cluster)
 
 ```
-curl http://localhost:30080/api/entries
-      │ (NodePort on kind node exposed to host)
-      ▼
-field-guide-api pod :5000
-      │ Flask blueprint: GET /api/entries
-      ▼
-PyMongo connection pool
-      │ MONGO_URI = mongodb://mongodb-svc:27017/fieldguide
-      │ (K8s Service DNS: <svc-name>.<namespace>.svc.cluster.local)
-      ▼
-MongoDB Service (ClusterIP, port 27017)
-      │
-      ▼
-MongoDB pod (Helm dependency)
-      │ returns cursor
-      ◄─────────────────────────────── JSON response
+Developer runs: cd apps/launchpad && python -m flask run
+    │  MONGO_URI=mongodb://localhost:27017/launchpad (.env)
+    │  FIELD_GUIDE_URL=http://localhost:8080 (.env)
+    ▼
+check_field_guide_health()
+    │  requests.get("http://localhost:8080/health", timeout=2)
+    │  → ConnectionRefused (no port-forward active)
+    ▼
+returns {"status": "unreachable"}  ← no crash, UI shows degraded card
+
+k8s.py: init_k8s_client()
+    │  load_incluster_config() → ConfigException (no SA token)
+    │  load_kube_config() → succeeds if cluster is up; ConfigException if not
+    ▼
+returns (None, None) → k8s routes return {"status": "unavailable"}
+    │
+Jinja2 renders dashboard with degraded/unknown states for K8s cards
 ```
 
-### Key Data Flows
-
-1. **Secrets flow:** `.env` on dev machine → `helm upgrade --set secrets.mongoUri=$MONGO_URI` → K8s Secret → mounted as env var in pod. Secret value never in Git.
-2. **Config flow:** `values.yaml` → ConfigMap template → pod env vars (LOG_LEVEL, etc.). ConfigMap is version-controlled and safe to commit.
-3. **Health check flow:** `GET /health` returns `{"status": "ok"}` + checks MongoDB reachability. Kubernetes liveness/readiness probes use this endpoint.
-4. **Metrics flow (seam):** `GET /metrics` exposes Prometheus-format counters. Pod annotation `prometheus.io/scrape: "true"` is set in values.yaml now; actual Prometheus scraping added in PRD-4.
-
-## Build Order (Component Dependencies)
-
-The build order follows hard dependency chains. Each step requires the previous to be complete.
+### Data Flow: Service Catalog CRUD
 
 ```
-Step 1: kind cluster + local registry      (infra/kind/ + scripts/)
-        ↓  cluster must exist before images can be loaded
-Step 2: Docker image build                  (apps/field-guide-api/Dockerfile)
-        ↓  image must exist in registry before Helm references it
-Step 3: docker push to local registry      (localhost:5001/...)
-        ↓  registry must have image before Helm deploy pulls it
-Step 4: Helm install/upgrade               (charts/field-guide-api/)
-        ↓  Helm release creates Deployment + MongoDB dep
-Step 5: Pods running, app reachable        (curl localhost:30080)
+Browser POST /api/services (htmx request)
+    │  {"name": "my-api", "repo": "github.com/..."}
+    ▼
+launchpad pod: services.py POST handler
+    │  validates payload (name required, URL format)
+    ▼
+mongo: db.services.insert_one(doc)   +   db.events.insert_one(event_doc)
+    ▼
+launchpad-mongodb pod → launchpad DB
+    │
+    ◄── HTTP 200 HTML fragment (htmx swap target)
+    ◄── service card appears in browser without full page reload
 ```
 
-**Makefile target chain implementing this order:**
-
-```makefile
-TAG     ?= 0.1.0
-CLUSTER  = k8s-launchpad
-APP      = field-guide-api
-REGISTRY = localhost:5001
-
-.PHONY: cluster-up cluster-down build push deploy undeploy test clean all
-
-cluster-up:
-	scripts/kind-with-registry.sh
-
-cluster-down:
-	kind delete cluster --name $(CLUSTER)
-
-build:
-	docker build -t $(REGISTRY)/$(APP):$(TAG) apps/$(APP)/
-
-push: build
-	docker push $(REGISTRY)/$(APP):$(TAG)
-
-deploy: push
-	helm upgrade --install $(APP) charts/$(APP)/ \
-	  --set image.tag=$(TAG) \
-	  --set secrets.mongoUri="$(MONGO_URI)" \
-	  --wait
-
-undeploy:
-	helm uninstall $(APP) --ignore-not-found
-
-test:
-	cd apps/$(APP) && python -m pytest tests/ -v --tb=short
-
-clean: undeploy cluster-down
-
-all: cluster-up deploy
-```
-
-**Key Makefile decisions:**
-- `push: build` — push always re-builds; no stale image risk
-- `deploy: push` — deploy always pushes first; `make deploy` is safe to run repeatedly
-- `--wait` on helm upgrade — target returns only when pods are Ready; avoids race conditions in automation
-- `TAG ?= 0.1.0` — overridable: `make deploy TAG=0.2.0` for version bumps without editing the file
-- Never use `latest` tag — avoids `imagePullPolicy: Always` footgun (see Pattern 2)
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Using `latest` tag with `kind load`
-
-**What people do:** `docker build -t myapp:latest . && kind load docker-image myapp:latest`
-
-**Why it's wrong:** Kubernetes defaults `imagePullPolicy: Always` for `latest`-tagged images. The kind node will try to pull from Docker Hub/registry, fail, and the pod stays in `ImagePullBackOff`. The image is in the node's containerd store but Kubernetes ignores it.
-
-**Do this instead:** Use explicit version tags (`0.1.0`, `dev-abc123`) or set `imagePullPolicy: Never` explicitly. Better yet: use the local registry approach — `imagePullPolicy: Always` then works correctly because the registry is reachable.
-
-### Anti-Pattern 2: Importing Flask app object at module level
-
-**What people do:** `from myapp import app` at the top of extension files or blueprints.
-
-**Why it's wrong:** Creates circular imports. Blueprint files import from `app`, `app` imports blueprints — Python cannot resolve the cycle.
-
-**Do this instead:** App factory + `current_app` proxy inside blueprint functions. Extensions are initialized separately (`mongo = PyMongo()` at module level, `mongo.init_app(app)` inside `create_app()`).
-
-### Anti-Pattern 3: Hard-coding image coordinates in Helm templates
-
-**What people do:** `image: mycompany/field-guide-api:0.1.0` directly in `deployment.yaml`.
-
-**Why it's wrong:** PRD-3 templating and CI automation require parameterized image references. Hard-coded values mean editing templates per deployment — templates are code, values are data.
-
-**Do this instead:** `image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"` with defaults in `values.yaml`.
-
-### Anti-Pattern 4: Skipping `--wait` on `helm upgrade` in Makefile
-
-**What people do:** `helm upgrade --install myapp ./charts/myapp/` without `--wait`, then immediately curl the service.
-
-**Why it's wrong:** Helm returns immediately after submitting manifests. Pods are still scheduling/pulling/starting. The next Makefile target or test that hits the endpoint will flap or fail.
-
-**Do this instead:** `helm upgrade --install myapp ./charts/myapp/ --wait --timeout 120s`. Add `--atomic` if you want automatic rollback on failure.
+---
 
 ## Integration Points
 
-### External Services
+### New Integration Points (v1.1)
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| MongoDB (in-cluster) | Helm dependency (`charts:` stanza in Chart.yaml), accessed via K8s Service DNS | Use Bitnami MongoDB chart as dep for PRD-1; `auth.enabled: false` for local dev simplicity |
-| Local registry | `docker push` + containerd `hosts.toml` config on kind nodes | Registry container must be running before `make push`; `kind-with-registry.sh` is idempotent |
-| Prometheus (future, PRD-4) | `/metrics` endpoint, pod annotation `prometheus.io/scrape: "true"` | App exposes endpoint now; Prometheus scraping added in PRD-4. No code change needed at PRD-4. |
+| Integration | Direction | Mechanism | Failure mode |
+|-------------|-----------|-----------|--------------|
+| launchpad → field-guide-api | outbound HTTP | `requests.get(FIELD_GUIDE_URL + "/health", timeout=2)` | `ConnectionError` → `{"status": "unreachable"}`; UI shows degraded card |
+| launchpad → K8s API | outbound HTTPS | `kubernetes` Python client, in-cluster SA token | `ApiException` / `ConfigException` → `{"status": "unavailable"}`; diagnostics section hidden |
+| launchpad → launchpad-mongodb | MongoDB wire | Flask-PyMongo, `MONGO_URI` from K8s Secret | `ServerSelectionTimeoutError` (2s) → `/health` returns 503; service catalog routes return 503 |
+| browser → launchpad | inbound HTTP | kubectl port-forward svc/launchpad 8081:80 | port-forward not active → connection refused; not an app-level concern |
 
-### Internal Boundaries
+### Existing Integration Points (v1.0, unchanged)
+
+| Integration | Direction | Mechanism | Notes |
+|-------------|-----------|-----------|-------|
+| field-guide-api → field-guide-api-mongodb | outbound MongoDB | Flask-PyMongo, `MONGO_URI` from K8s Secret | `?serverSelectionTimeoutMS=2000` in URI |
+| Makefile → Docker daemon | build | `docker build`, `docker push` | `MSYS_NO_PATHCONV=1` prevents path mangling |
+| Makefile → Helm | deploy | `helm upgrade --install --wait --timeout 180s` | `--wait` required; pods must be Ready before target returns |
+| pod → local registry | image pull | containerd `hosts.toml` mirror config | `localhost:5001` → `http://kind-registry:5000` via Docker network |
+
+### Internal Boundaries (launchpad app)
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| Makefile ↔ scripts/ | Makefile calls `scripts/kind-with-registry.sh` as a shell exec | Script handles idempotency (checks if cluster/registry already exists); Makefile is the contract |
-| Helm chart ↔ values.yaml | `.Values.*` object only — no hardcoding in templates | PRD-3 can supply a different values file per app without modifying templates |
-| Flask blueprints ↔ extensions | Blueprints import `mongo` from `extensions.py`; never from `__init__.py` | Prevents circular imports; `extensions.py` has no Flask app dependency |
-| app pod ↔ MongoDB | `MONGO_URI` env var injected from K8s Secret | Secret is created by Helm from `values.yaml` secret override; never committed |
-| app pod ↔ host (dev) | NodePort 30080 exposed on kind node → host | For local curl during development; Ingress or port-forward added later |
+| `routes/ui.py` ↔ `routes/status.py` | Function call (shared module) | UI route calls status helpers; no circular import if status has no Flask template deps |
+| `routes/*.py` ↔ `extensions.py` | Import `mongo` from `app.extensions` | Same pattern as field-guide-api; never import from `app.__init__` |
+| `routes/*.py` ↔ `k8s.py` | Import `init_k8s_client` function | `k8s.py` is a standalone module; initialized once at app startup in `create_app()` and stored on `app.extensions` or `g` |
+| `app/__init__.py` ↔ blueprints | Deferred import inside `create_app()` | Same pattern as field-guide-api; blueprints imported after extensions are initialized |
 
-## Scaling Considerations
+---
 
-This is a local dev platform; scaling to users is not the concern. The relevant "scaling" is adding more apps to the platform (PRD-3).
+## Build Order for v1.1
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| 1 app (PRD-1) | Single chart, single values.yaml, single namespace |
-| 3-5 apps (PRD-3) | Generic chart template; per-app values override files; App-of-Apps Helm/ArgoCD pattern |
-| 10+ apps (post-PRD-4) | Helm library chart extracted from field-guide-api chart; chart museum or OCI registry for chart storage |
+Dependencies are strict within the phase structure. Each item must be complete before the next can be validated end-to-end.
+
+```
+EXISTING (v1.0, already done):
+  kind cluster + local registry         (make cluster-up)
+  field-guide-api image + chart         (make build load deploy)
+
+v1.1 PHASE 1: apps/launchpad/ scaffold
+  ├── app/__init__.py (create_app factory — identical pattern to field-guide-api)
+  ├── app/config.py (MONGO_URI, FIELD_GUIDE_URL, K8S_NAMESPACE env vars)
+  ├── app/extensions.py (Flask-PyMongo init)
+  ├── app/k8s.py (in-cluster → kubeconfig → None degradation)
+  ├── app/routes/ stubs (ui.py, status.py, services.py, events.py)
+  ├── tests/conftest.py (create_app fixture + mock k8s + mock requests)
+  ├── requirements.txt + requirements-dev.txt
+  └── pytest.ini
+  VALIDATES: make test-launchpad passes without cluster or MongoDB
+
+v1.1 PHASE 2: UI layer
+  ├── app/templates/ (base.html, index.html, services.html, diagnostics.html)
+  ├── app/static/ (vendored htmx.min.js, CSS)
+  └── routes/ui.py (Jinja2 render + htmx fragment responses)
+  VALIDATES: flask run locally; browser shows dashboard (degraded state cards are OK)
+
+v1.1 PHASE 3: Status API + field-guide-api integration
+  ├── routes/status.py (GET /health, GET /api/status)
+  └── status.py calls FIELD_GUIDE_URL/health with 2s timeout + graceful degradation
+  VALIDATES: /health returns 200; /api/status returns JSON with field_guide status
+
+v1.1 PHASE 4: K8s client + RBAC + charts/launchpad/
+  ├── k8s.py complete (list pods, list deployments)
+  ├── routes/status.py K8s section
+  ├── charts/launchpad/Chart.yaml
+  ├── charts/launchpad/values.yaml
+  ├── charts/launchpad/templates/_helpers.tpl
+  ├── charts/launchpad/templates/deployment.yaml   (includes serviceAccountName)
+  ├── charts/launchpad/templates/service.yaml
+  ├── charts/launchpad/templates/configmap.yaml
+  ├── charts/launchpad/templates/secret.yaml       (MONGO_URI)
+  ├── charts/launchpad/templates/rbac/serviceaccount.yaml
+  ├── charts/launchpad/templates/rbac/role.yaml
+  ├── charts/launchpad/templates/rbac/rolebinding.yaml
+  └── apps/launchpad/Dockerfile
+  VALIDATES: helm lint charts/launchpad/ passes; make build-launchpad load-launchpad deploy-launchpad
+             runs; pod is Running; /health 200; /api/status shows K8s pod list
+
+v1.1 PHASE 5: Service catalog + events (MongoDB CRUD)
+  ├── charts/launchpad/templates/mongodb/ (deployment/service/pvc/secret — same pattern)
+  ├── routes/services.py (GET/POST/DELETE /api/services + htmx fragment)
+  └── routes/events.py (GET /api/events + htmx stream fragment)
+  VALIDATES: service catalog form submits; data persists in launchpad DB;
+             make undeploy-launchpad + deploy-launchpad; data survives (PVC retained)
+
+v1.1 PHASE 6: Makefile + integration smoke test
+  ├── Makefile LP_ variable block
+  ├── Makefile launchpad targets (build-launchpad, load-launchpad, deploy-launchpad, ...)
+  ├── Makefile up-all target
+  └── smoke-launchpad target
+  VALIDATES: make up-all (fresh cluster) → both apps running → smoke-launchpad PASS
+             make help shows all new targets with descriptions
+```
+
+**Critical ordering constraints:**
+
+- `charts/launchpad/templates/rbac/` must include `serviceAccountName` in the Deployment template — if omitted, the pod uses `default` SA and K8s API calls return 403 even though RBAC looks correct in `kubectl get rolebinding`.
+- MongoDB manifests in `charts/launchpad/templates/mongodb/` must use helpers from `_helpers.tpl` (e.g., `launchpad.mongodb.fullname`) that are distinct from the `field-guide-api` helpers — name collisions in the same namespace would route traffic between the wrong MongoDB pods.
+- `make deploy-launchpad` should run after `make deploy` (field-guide-api) so the field-guide-api Service exists when the dashboard's status check first runs, but this is a soft ordering — launchpad degrades gracefully if field-guide-api is absent.
+
+---
+
+## Anti-Patterns for v1.1
+
+### Anti-Pattern 1: Shared MongoDB with Cross-Chart Secret Reference
+
+**What people do:** Set `mongodb.enabled=false` in `charts/field-guide-api/values.yaml` and point both apps at a single MongoDB release.
+
+**Why it's wrong:** It requires modifying the working v1.0 chart, introducing a new deploy-time dependency ordering (MongoDB release must exist before either app chart), and complicates `helm uninstall` for either app. The `externalMongoUri` seam exists for exactly this scenario but using it here adds risk with minimal benefit for two lightweight apps.
+
+**Do this instead:** Two `mongo:7` pods, two databases. The local kind cluster has ample resources. Keep each chart self-contained.
+
+### Anti-Pattern 2: Using ClusterRole Instead of Role for Dashboard RBAC
+
+**What people do:** Create a `ClusterRole` for the ServiceAccount to avoid dealing with namespace scoping.
+
+**Why it's wrong:** ClusterRole grants permissions across ALL namespaces. For a dashboard that only needs to inspect the `default` namespace, this is unnecessary privilege escalation and a bad security pattern — especially in a portfolio project where a reviewer will check the RBAC manifests.
+
+**Do this instead:** `Role` + `RoleBinding` scoped to `default`. If a future PRD requires multi-namespace inspection, expand to `ClusterRole` with justification in a comment.
+
+### Anti-Pattern 3: Hardcoding Service DNS in the App
+
+**What people do:** `FIELD_GUIDE_URL = "http://field-guide-api"` as a Python constant.
+
+**Why it's wrong:** The URL must be overridable for local dev (`localhost:8080`), CI (mock), and future environments. Hardcoded URLs also break `helm lint` reasoning when the target service name changes.
+
+**Do this instead:** Read from environment variable with a sensible local default. Inject via ConfigMap in the chart. The value in `values.yaml` becomes the single source of truth for the in-cluster URL.
+
+### Anti-Pattern 4: Duplicating Makefile targets instead of LP_ prefix pattern
+
+**What people do:** Copy `build`, `load`, `deploy`, `smoke` target bodies and change image/release names inside them.
+
+**Why it's wrong:** The existing targets refer to `$(IMAGE)`, `$(RELEASE)`, `$(CHART)` variables. Copying and editing the bodies makes `make help` ambiguous and creates divergence when the original targets are updated.
+
+**Do this instead:** New variable block with `LP_` prefix + new target names (`build-launchpad`, etc.). The `up-all` composite chains both sets. `make build` always means field-guide-api; `make build-launchpad` always means the dashboard. No ambiguity.
+
+### Anti-Pattern 5: Calling `load_incluster_config()` Without a Try/Except
+
+**What people do:** `kubernetes.config.load_incluster_config()` at module import time or in `create_app()` without catching `ConfigException`.
+
+**Why it's wrong:** Module-level K8s config loading fails immediately outside the cluster, making the app unimportable for tests. `create_app()` crashes on every `make test-launchpad` run in a developer environment without a cluster.
+
+**Do this instead:** Lazy initialization with the try/except chain in `k8s.py`. Store the result on `current_app` or return `None` when no config is available. Routes check for `None` and return a degraded response.
+
+---
+
+## Namespace Strategy
+
+Both apps deploy in the `default` namespace. This is intentional for v1.1:
+- ClusterIP Service DNS short-form works: `http://field-guide-api` resolves within `default`
+- RBAC `Role` (not `ClusterRole`) scoped to `default` is correct minimum privilege
+- `kubectl port-forward`, `make smoke`, and `make smoke-launchpad` use the same namespace context
+- No additional `kubectl config set-context` steps for the developer
+
+A dedicated `launchpad` namespace would require cross-namespace DNS (`http://field-guide-api.default.svc.cluster.local`), namespace-aware RBAC, and `--namespace` flags on every `helm upgrade` and `kubectl` call. Not justified for this scope.
+
+---
 
 ## Sources
 
-- kind official local registry docs: https://kind.sigs.k8s.io/docs/user/local-registry/
-- kind load vs registry architectural analysis: https://iximiuz.com/en/posts/kubernetes-kind-load-docker-image/
-- Flask app factory pattern: https://flask.palletsprojects.com/en/stable/patterns/appfactories/ (via Context7 /pallets/flask)
-- Helm chart best practices (imagePullPolicy, values structure): https://helm.sh/docs/chart_best_practices/ (via Context7 /helm/helm-www)
-- Generic Helm chart pattern: https://rtfm.co.ua/en/helm-reusable-chart-named-templates-and-a-generic-chart-for-multiple-applications/
-- Flask + MongoDB + Docker structure: https://www.digitalocean.com/community/tutorials/how-to-set-up-flask-with-mongodb-and-docker
+- `charts/field-guide-api/` — live codebase inspection: Helm helper patterns, MongoDB manifest structure, RBAC-free baseline (HIGH confidence)
+- `Makefile` — live codebase inspection: variable naming conventions, `MSYS_NO_PATHCONV`, `SHELL := /bin/bash`, `LP_` prefix approach (HIGH confidence)
+- `apps/field-guide-api/app/__init__.py` — live codebase inspection: app factory pattern to replicate in launchpad (HIGH confidence)
+- [kubernetes Python client](https://github.com/kubernetes-client/python) — `load_incluster_config()` / `load_kube_config()` / `ConfigException` pattern (HIGH confidence)
+- [Kubernetes RBAC docs](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — Role vs ClusterRole, ServiceAccount mounting, projected token path (HIGH confidence)
+- [K8s in-cluster config](https://kubernetes.io/docs/tasks/run-application/access-api-from-pod/) — SA token path `/var/run/secrets/kubernetes.io/serviceaccount/`, `kubernetes.default.svc` (HIGH confidence)
+- [K8s Service DNS](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/) — `<svc>.<namespace>.svc.cluster.local` resolution (HIGH confidence)
 
 ---
-*Architecture research for: local Kubernetes IDP foundation (PRD-1)*
-*Researched: 2026-07-04*
+*Architecture research for: k8s-launchpad v1.1 Product Dashboard (PRD-3)*
+*Researched: 2026-07-08*
