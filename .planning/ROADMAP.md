@@ -107,7 +107,19 @@ Plans:
   2. After the make sequence, the deployed app is reachable locally and returns 200 from `/health` and data from `/entries`
   3. A developer new to the project can follow the README (clone → `make cluster-up` → `make deploy` → `curl`) without needing any additional guidance
 
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Makefile: convert to inline `## description` help convention + `help` default goal + DX targets (up, check-tools, port-forward, smoke, clean, clean-venv, reset-local) [MAKE-01, MAKE-02]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-02-PLAN.md — Portfolio-grade README rewrite (Mermaid architecture, quickstart, demo flow, security note) + docs/ deep-dive pages (troubleshooting, windows-setup, known-limitations) [DOCS-01]
+
+**Wave 3** *(blocked on Waves 1-2; blocking human-verify — live loop run)*
+
+- [ ] 04-03-PLAN.md — Live end-to-end verification of the full loop + `make smoke` (Git Bash primary, WSL2 where available), capture real output [MAKE-02]
 
 ## Progress
 
@@ -119,4 +131,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Scaffold + App + Tests | 3/3 | Complete   | 2026-07-04 |
 | 2. Cluster Infrastructure | 2/2 | Complete   | 2026-07-05 |
 | 3. Containerization + Helm Deployment | 4/4 | Complete   | 2026-07-06 |
-| 4. Makefile + Documentation | 0/TBD | Not started | - |
+| 4. Makefile + Documentation | 0/3 | Not started | - |
