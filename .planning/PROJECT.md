@@ -4,11 +4,28 @@
 
 k8s-launchpad is a self-hosted Internal Developer Platform (IDP) — a "mini-Heroku" running on a local Kubernetes cluster. A developer registers a Git repo through a web dashboard; the platform automatically builds it (Docker), deploys it (Helm), syncs it via GitOps (ArgoCD), monitors it (Prometheus/Grafana/Loki), and scans it for vulnerabilities (Trivy), with a self-diagnostics engine that health-checks the platform's own components. Built as a portfolio piece to demonstrate platform-engineering-level thinking.
 
-**PRD-1 (foundation) shipped as v1.0 on 2026-07-07:** monorepo, a sample "field-guide" Flask API (the platform's dogfood app), containerization, a local kind cluster with local registry, and Helm deployment — everything local and free. Next up: PRD-2 (GitOps/ArgoCD).
+**PRD-1 (foundation) shipped as v1.0 on 2026-07-07:** monorepo, a sample "field-guide" Flask API (the platform's dogfood app), containerization, a local kind cluster with local registry, and Helm deployment — everything local and free. Now building PRD-3 (Product Dashboard / Local IDP UI) as v1.1 — deliberately ahead of PRD-2 (GitOps), presentation layer first.
 
 ## Core Value
 
 `make cluster-up && make build && make load && make deploy` produces a running, reachable app on a local kind cluster — the full local build-to-deploy loop works end to end.
+
+## Current Milestone: v1.1 Product Dashboard
+
+**Goal:** Make k8s-launchpad visible as a product — a Flask-served browser dashboard that presents the platform as a local Internal Developer Platform, demoable to a human reviewer.
+
+**Target features:**
+
+- New platform app `apps/launchpad/` — separate Flask app with its own Dockerfile + Helm chart (platform/workload separation; reuses v1.0 chart patterns and the values.yaml templating seam)
+- UI shell: landing/dashboard at `/`, sidebar/topbar, status cards — Jinja2 + vendored htmx (no CDN, no build step, no React/Vite)
+- Real platform status API: API health, Mongo status, app/version info, service/demo state, metrics preview
+- Service catalog page + launch/onboard form storing service registrations in MongoDB (no real deployment pipeline behind it)
+- Diagnostics section: in-app checks (Mongo ping, self-health, config/version) plus read-only Kubernetes API queries via ServiceAccount RBAC, degrading gracefully outside the cluster — seed of the self-diagnostics engine
+- Activity/events feed backed by simple persisted events in MongoDB
+- README/demo updates: browser demo flow, screenshots plan
+- Docker/Helm compatibility intact — dashboard deploys through the same `make` loop
+
+**Out of scope for v1.1:** ArgoCD/GitOps (PRD-2), Prometheus/Grafana/Loki (PRD-4), EKS/Terraform/cloud, real deployment pipeline behind the onboard form.
 
 ## Requirements
 
@@ -28,14 +45,14 @@ k8s-launchpad is a self-hosted Internal Developer Platform (IDP) — a "mini-Her
 
 ### Active
 
-(None — v1.0 shipped. Next milestone requirements defined via /gsd-new-milestone.)
+v1.1 (Product Dashboard) requirements — being defined via /gsd-new-milestone; canonical list in .planning/REQUIREMENTS.md.
 
 ### Out of Scope
 
-- ArgoCD / GitOps — deferred to PRD-2
-- Platform dashboard / repo onboarding — deferred to PRD-3
+- ArgoCD / GitOps — deferred to PRD-2 (now scheduled after v1.1)
 - Prometheus/Grafana/Loki/Trivy deployment — deferred to PRD-4 (app exposes /metrics now as a seam)
-- Any AWS/EKS/Terraform — deferred to final PRD; this milestone is local and free only
+- Any AWS/EKS/Terraform — deferred to final PRD; everything stays local and free
+- Real deployment pipeline behind the onboard form — v1.1 stores registrations only; wiring them to actual builds/deploys is a later PRD
 
 ## Context
 
@@ -71,6 +88,10 @@ k8s-launchpad is a self-hosted Internal Developer Platform (IDP) — a "mini-Her
 | registry:3 + per-node containerd hosts.toml | Canonical kind local-registry pattern; self-verifying push/pull at cluster-up | ✓ Good — wiring re-verified on every cluster-up |
 | gunicorn-only serving (never Flask dev server) | SIGTERM handling for graceful pod termination | ✓ Good — non-root UID 10001, PID 1 exec-form |
 | awk-powered self-documenting Makefile help | 15 targets discoverable via `make help` default goal | ✓ Good — README demo matches real output |
+| PRD-3 (dashboard) before PRD-2 (GitOps) | v1.0 proved the backend loop; missing layer is presentation — make the platform demoable in a browser first | — Pending (v1.1) |
+| Dashboard = separate platform app `apps/launchpad/` | Platform/workload separation — field-guide API stays the dogfood workload; exercises v1.0 values.yaml templating seam | — Pending (v1.1) |
+| Jinja2 + vendored htmx for dashboard UI | Flask-first, no React/Vite, no CDN/build step; hypermedia fragments for live status cards and forms | — Pending (v1.1) |
+| Diagnostics via in-app checks + read-only K8s API (ServiceAccount RBAC) | Seed of the self-diagnostics engine; degrades gracefully outside the cluster | — Pending (v1.1) |
 
 ## Evolution
 
@@ -97,7 +118,7 @@ Known tech debt: README /health example shows compact JSON while Flask emits spa
 
 ## Next Milestone Goals
 
-PRD-2 (GitOps) is the next deferred tranche — ArgoCD syncs deployments from Git (GITOPS-01). Define scope via `/gsd-new-milestone`. Later: PRD-3 platform dashboard, PRD-4 observability/security, final PRD AWS/EKS.
+After v1.1 (PRD-3 Product Dashboard): PRD-2 GitOps — ArgoCD syncs deployments from Git (GITOPS-01). Later: PRD-4 observability/security, final PRD AWS/EKS.
 
 ---
-*Last updated: 2026-07-07 after v1.0 milestone*
+*Last updated: 2026-07-07 — milestone v1.1 Product Dashboard started*
