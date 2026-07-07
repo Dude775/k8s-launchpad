@@ -115,7 +115,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-02-PLAN.md — Portfolio-grade README rewrite (Mermaid architecture, quickstart, demo flow, security note) + docs/ deep-dive pages (troubleshooting, windows-setup, known-limitations) [DOCS-01]
+- [x] 04-02-PLAN.md — Portfolio-grade README rewrite (Mermaid architecture, quickstart, demo flow, security note) + docs/ deep-dive pages (troubleshooting, windows-setup, known-limitations) [DOCS-01]
 
 **Wave 3** *(blocked on Waves 1-2; blocking human-verify — live loop run)*
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Scaffold + App + Tests | 3/3 | Complete   | 2026-07-04 |
 | 2. Cluster Infrastructure | 2/2 | Complete   | 2026-07-05 |
 | 3. Containerization + Helm Deployment | 4/4 | Complete   | 2026-07-06 |
-| 4. Makefile + Documentation | 1/3 | In Progress|  |
+| 4. Makefile + Documentation | 2/3 | In Progress|  |
