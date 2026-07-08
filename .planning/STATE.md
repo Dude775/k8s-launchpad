@@ -4,13 +4,13 @@ milestone: v1.1
 milestone_name: Product Dashboard
 status: executing
 stopped_at: Phase 5 context gathered
-last_updated: "2026-07-08T09:04:11.192Z"
-last_activity: 2026-07-08 -- Phase 05 planning complete
+last_updated: "2026-07-08T09:29:50.358Z"
+last_activity: 2026-07-08
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-08)
 
 **Core value:** `make up-all` brings up the kind cluster and both apps (field-guide-api + launchpad dashboard), making the platform demoable to a human reviewer in a browser at localhost:8081
-**Current focus:** Roadmap defined for v1.1 (6 phases, 27 requirements) — start Phase 5 with `/gsd:plan-phase 5`
+**Current focus:** Phase 05 — monorepo-scaffold-app-factory
 
 ## Current Position
 
-Phase: 5 — Monorepo Scaffold + App Factory (not started)
-Plan: —
+Phase: 05 (monorepo-scaffold-app-factory) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-08 -- Phase 05 planning complete
+Last activity: 2026-07-08
 
-Progress: ░░░░░░░░░░ 0% (0/6 phases)
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: ░░░░░░░░░░ 0% (0/6 phases)
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 05 P01 | 24min | 2 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,7 @@ Recent decisions affecting current work:
 - Roadmap: DEP-03 (launchpad MongoDB manifests) co-located with Phase 9 (catalog CRUD) so TTL index is created before first event insert
 - Roadmap: DEP-01/02 (Helm chart + RBAC) in Phase 8, DEP-03 (MongoDB manifests) in Phase 9, DEP-04/05 (Makefile targets + smoke) in Phase 10 — split is intentional per research ordering
 - Roadmap: UI hint applied to Phase 6 (UI shell) and Phase 9 (catalog forms/detail pages)
+- [Phase 05]: test_k8s.py isolates HOME/USERPROFILE to stay hermetic against a real dev-machine kubeconfig (RESEARCH Pitfall 2) — confirmed necessary during Task 2 verification on this machine
 
 ### Pending Todos
 
@@ -94,9 +96,9 @@ None yet — roadmap freshly created.
 
 ## Session Continuity
 
-Last session: 2026-07-08T01:21:10.084Z
+Last session: 2026-07-08T09:27:53.621Z
 Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-monorepo-scaffold-app-factory/05-CONTEXT.md
+Resume file: None
 
 ## Operator Next Steps
 

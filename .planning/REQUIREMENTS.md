@@ -9,8 +9,8 @@ Requirements for milestone v1.1 (PRD-3 Product Dashboard). Each maps to a roadma
 
 ### Platform App Scaffold
 
-- [ ] **APP-01**: New `apps/launchpad/` Flask app exists with a `create_app` app-factory and env-driven config, structured separately from the field-guide-api workload (own Dockerfile, own requirements)
-- [ ] **APP-02**: The Kubernetes client initializes lazily (never at import time) and returns a disabled signal when no cluster config is available, so the app and its tests load without a kubeconfig
+- [x] **APP-01**: New `apps/launchpad/` Flask app exists with a `create_app` app-factory and env-driven config, structured separately from the field-guide-api workload (own Dockerfile, own requirements)
+- [x] **APP-02**: The Kubernetes client initializes lazily (never at import time) and returns a disabled signal when no cluster config is available, so the app and its tests load without a kubeconfig
 
 ### Dashboard UI
 
@@ -102,8 +102,8 @@ Which phases cover which requirements. Phase assignments populated during roadma
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| APP-01 | Phase 5 | Pending |
-| APP-02 | Phase 5 | Pending |
+| APP-01 | Phase 5 | Complete |
+| APP-02 | Phase 5 | Complete |
 | UI-01 | Phase 6 | Pending |
 | UI-02 | Phase 6 | Pending |
 | UI-03 | Phase 6 | Pending |

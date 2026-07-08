@@ -40,7 +40,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   3. Importing `app.k8s` with no kubeconfig present returns `(None, None)` — no exception raised at import time or at `create_app()` time
   4. `LP_IMAGE`, `LP_RELEASE`, `LP_CHART` Makefile variables and target stubs exist and do not override or shadow field-guide-api variables (`make help` shows both apps' targets without collision)
 **Plans**: 2 plans
-  - [ ] 05-01-PLAN.md — launchpad Flask app skeleton (factory, config, extensions, lazy app.k8s, /health stub, Dockerfile) + 100%-coverage test harness [APP-01, APP-02]
+  - [x] 05-01-PLAN.md — launchpad Flask app skeleton (factory, config, extensions, lazy app.k8s, /health stub, Dockerfile) + 100%-coverage test harness [APP-01, APP-02]
   - [ ] 05-02-PLAN.md — Makefile LP_* vars + six namespaced launchpad targets (test-launchpad works; build/load/deploy/port-forward/smoke guarded stubs) [APP-01]
 
 ### Phase 6: UI Layer — Templates + Static Assets
@@ -113,7 +113,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 2. Cluster Infrastructure | v1.0 | 2/2 | Complete | 2026-07-05 |
 | 3. Containerization + Helm Deployment | v1.0 | 4/4 | Complete | 2026-07-06 |
 | 4. Makefile + Documentation | v1.0 | 3/3 | Complete | 2026-07-07 |
-| 5. Monorepo Scaffold + App Factory | v1.1 | 0/2 | Not started | - |
+| 5. Monorepo Scaffold + App Factory | v1.1 | 1/2 | In Progress|  |
 | 6. UI Layer — Templates + Static Assets | v1.1 | 0/? | Not started | - |
 | 7. Status API + Field-Guide Integration | v1.1 | 0/? | Not started | - |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 0/? | Not started | - |
