@@ -21,7 +21,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
 ### v1.1 Product Dashboard (Phases 5-10)
 
-- [ ] **Phase 5: Monorepo Scaffold + App Factory** — launchpad Flask app structure and test harness pass without a cluster
+- [x] **Phase 5: Monorepo Scaffold + App Factory** — launchpad Flask app structure and test harness pass without a cluster (completed 2026-07-08)
 - [ ] **Phase 6: UI Layer — Templates + Static Assets** — browser dashboard shell renders with vendored assets and sidebar navigation
 - [ ] **Phase 7: Status API + Field-Guide Integration** — platform status contract defined; /health safe for Kubernetes readinessProbe
 - [ ] **Phase 8: Helm Chart + K8s Diagnostics** — launchpad deploys to kind via Helm with RBAC; diagnostics page shows live cluster state
@@ -41,7 +41,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   4. `LP_IMAGE`, `LP_RELEASE`, `LP_CHART` Makefile variables and target stubs exist and do not override or shadow field-guide-api variables (`make help` shows both apps' targets without collision)
 **Plans**: 2 plans
   - [x] 05-01-PLAN.md — launchpad Flask app skeleton (factory, config, extensions, lazy app.k8s, /health stub, Dockerfile) + 100%-coverage test harness [APP-01, APP-02]
-  - [ ] 05-02-PLAN.md — Makefile LP_* vars + six namespaced launchpad targets (test-launchpad works; build/load/deploy/port-forward/smoke guarded stubs) [APP-01]
+  - [x] 05-02-PLAN.md — Makefile LP_* vars + six namespaced launchpad targets (test-launchpad works; build/load/deploy/port-forward/smoke guarded stubs) [APP-01]
 
 ### Phase 6: UI Layer — Templates + Static Assets
 **Goal**: The dashboard shell renders fully in a browser with sidebar navigation and vendored assets, with no internet access required
@@ -113,7 +113,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 2. Cluster Infrastructure | v1.0 | 2/2 | Complete | 2026-07-05 |
 | 3. Containerization + Helm Deployment | v1.0 | 4/4 | Complete | 2026-07-06 |
 | 4. Makefile + Documentation | v1.0 | 3/3 | Complete | 2026-07-07 |
-| 5. Monorepo Scaffold + App Factory | v1.1 | 1/2 | In Progress|  |
+| 5. Monorepo Scaffold + App Factory | v1.1 | 2/2 | Complete   | 2026-07-08 |
 | 6. UI Layer — Templates + Static Assets | v1.1 | 0/? | Not started | - |
 | 7. Status API + Field-Guide Integration | v1.1 | 0/? | Not started | - |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 0/? | Not started | - |
