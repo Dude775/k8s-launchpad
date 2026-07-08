@@ -102,39 +102,39 @@ Which phases cover which requirements. Phase assignments populated during roadma
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| APP-01 | TBD | Pending |
-| APP-02 | TBD | Pending |
-| UI-01 | TBD | Pending |
-| UI-02 | TBD | Pending |
-| UI-03 | TBD | Pending |
-| UI-04 | TBD | Pending |
-| UI-05 | TBD | Pending |
-| STAT-01 | TBD | Pending |
-| STAT-02 | TBD | Pending |
-| STAT-03 | TBD | Pending |
-| STAT-04 | TBD | Pending |
-| CAT-01 | TBD | Pending |
-| CAT-02 | TBD | Pending |
-| CAT-03 | TBD | Pending |
-| CAT-04 | TBD | Pending |
-| CAT-05 | TBD | Pending |
-| DIAG-01 | TBD | Pending |
-| DIAG-02 | TBD | Pending |
-| FEED-01 | TBD | Pending |
-| FEED-02 | TBD | Pending |
-| FEED-03 | TBD | Pending |
-| DEP-01 | TBD | Pending |
-| DEP-02 | TBD | Pending |
-| DEP-03 | TBD | Pending |
-| DEP-04 | TBD | Pending |
-| DEP-05 | TBD | Pending |
-| DOCS-01 | TBD | Pending |
+| APP-01 | Phase 5 | Pending |
+| APP-02 | Phase 5 | Pending |
+| UI-01 | Phase 6 | Pending |
+| UI-02 | Phase 6 | Pending |
+| UI-03 | Phase 6 | Pending |
+| UI-04 | Phase 6 | Pending |
+| UI-05 | Phase 6 | Pending |
+| STAT-01 | Phase 7 | Pending |
+| STAT-02 | Phase 7 | Pending |
+| STAT-03 | Phase 7 | Pending |
+| STAT-04 | Phase 7 | Pending |
+| CAT-01 | Phase 9 | Pending |
+| CAT-02 | Phase 9 | Pending |
+| CAT-03 | Phase 9 | Pending |
+| CAT-04 | Phase 9 | Pending |
+| CAT-05 | Phase 9 | Pending |
+| DIAG-01 | Phase 8 | Pending |
+| DIAG-02 | Phase 8 | Pending |
+| FEED-01 | Phase 9 | Pending |
+| FEED-02 | Phase 9 | Pending |
+| FEED-03 | Phase 9 | Pending |
+| DEP-01 | Phase 8 | Pending |
+| DEP-02 | Phase 8 | Pending |
+| DEP-03 | Phase 9 | Pending |
+| DEP-04 | Phase 10 | Pending |
+| DEP-05 | Phase 10 | Pending |
+| DOCS-01 | Phase 10 | Pending |
 
 **Coverage:**
 - v1 requirements: 27 total
-- Mapped to phases: 0 (roadmapper populates)
-- Unmapped: 27 ⚠️ (resolved at roadmap creation)
+- Mapped to phases: 27
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-08*
-*Last updated: 2026-07-08 after initial definition*
+*Last updated: 2026-07-08 — traceability populated by roadmapper*

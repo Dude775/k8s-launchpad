@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Product Dashboard
-status: planning
-last_updated: "2026-07-07T20:59:53.332Z"
-last_activity: 2026-07-07
+status: in_progress
+last_updated: "2026-07-08T00:00:00.000Z"
+last_activity: 2026-07-08
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,38 +17,43 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-04)
+See: .planning/PROJECT.md (updated 2026-07-08)
 
-**Core value:** `make cluster-up && make build && make load && make deploy` produces a running, reachable app on a local kind cluster — the full local build-to-deploy loop works end to end (proven in v1.0)
-**Current focus:** Planning next milestone (PRD-2 GitOps/ArgoCD candidate) — start with /gsd-new-milestone
+**Core value:** `make up-all` brings up the kind cluster and both apps (field-guide-api + launchpad dashboard), making the platform demoable to a human reviewer in a browser at localhost:8081
+**Current focus:** Roadmap defined for v1.1 (6 phases, 27 requirements) — start Phase 5 with `/gsd:plan-phase 5`
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 5 — Monorepo Scaffold + App Factory (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-07 — Milestone v1.1 started
+Status: Roadmap complete; ready for phase planning
+Last activity: 2026-07-08 — Roadmap created for v1.1 Product Dashboard
+
+Progress: ░░░░░░░░░░ 0% (0/6 phases)
 
 ## Performance Metrics
 
-**Velocity:**
+**Velocity (v1.0 reference):**
 
-- Total plans completed: 9
-- Average duration: -
-- Total execution time: 0 hours
+- v1.0 total plans completed: 12
+- v1.0 phases: 4 (12 plans, 114 commits, 4 days)
+- v1.0 avg plans/phase: 3
 
-**By Phase:**
+**v1.1 By Phase (projected):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 3 | - | - |
-| 02 | 2 | - | - |
-| 03 | 4 | - | - |
+| 05 | ? | - | - |
+| 06 | ? | - | - |
+| 07 | ? | - | - |
+| 08 | ? | - | - |
+| 09 | ? | - | - |
+| 10 | ? | - | - |
 
 **Recent Trend:**
 
-- Last 5 plans: -
-- Trend: -
+- v1.1 plans completed: 0
+- Trend: —
 
 *Updated after each plan completion*
 
@@ -59,35 +64,39 @@ Last activity: 2026-07-07 — Milestone v1.1 started
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- Roadmap: Coarse granularity (4 phases) — scaffold+app+tests grouped in Phase 1 to establish git hygiene before any scripts land
-- Roadmap: CLUS-01/02 isolated in Phase 2 — cluster registry wiring is a hard prerequisite for image push; atomic in cluster-up
-- Roadmap: MongoDB uses plain mongo:7 manifests embedded in chart (not Bitnami — paywalled since Aug 2025)
-- Roadmap: Dockerfile uses gunicorn from first write — Flask dev server never appears in any Dockerfile CMD
+- Roadmap: 6 phases (5-10), continuing from v1.0 Phase 4; research phase ordering preserved exactly
+- Roadmap: Makefile LP_ variable namespace established in Phase 5 (highest recovery cost if deferred)
+- Roadmap: Lazy K8s client init (`get_k8s_client()` returns `(None, None)`) established in Phase 5 before any route is written
+- Roadmap: `/health` checks only launchpad's own MongoDB; `/api/status` handles all downstream checks — separation established in Phase 7 before Helm readinessProbe is written in Phase 8
+- Roadmap: DEP-03 (launchpad MongoDB manifests) co-located with Phase 9 (catalog CRUD) so TTL index is created before first event insert
+- Roadmap: DEP-01/02 (Helm chart + RBAC) in Phase 8, DEP-03 (MongoDB manifests) in Phase 9, DEP-04/05 (Makefile targets + smoke) in Phase 10 — split is intentional per research ordering
+- Roadmap: UI hint applied to Phase 6 (UI shell) and Phase 9 (catalog forms/detail pages)
 
 ### Pending Todos
 
-None yet.
+None yet — roadmap freshly created.
 
 ### Blockers/Concerns
 
-- Research flag (Phase 3): Test MongoDB auth connection string with `?authSource=admin` explicitly
-- Research flag (Phase 3): Verify mongomock supports PyMongo 4.13.x API; fall back to monkeypatch if incompatible
+- Research flag (Phase 8): Confirm `serviceAccountName` + `load_incluster_config()` interaction failure modes: no token = clean `ConfigException` vs wrong ServiceAccount = silent 403. Verify during phase planning.
+- Research flag (Phase 7): Confirm htmx 2.0.x visibility guard syntax `hx-trigger="every 30s [document.visibilityState !== 'hidden']"` — fallback is chained polling if unsupported.
+- Research flag (Phase 9): mongomock cannot verify TTL expiry timing — document in conftest.py; TTL correctness verified live via smoke only.
 
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
 | PRD-2 | ArgoCD GitOps (GITOPS-01) | Deferred | PRD-1 start |
-| PRD-3 | Platform dashboard (PLAT-01) | Deferred | PRD-1 start |
+| PRD-3 (later) | Real deploy pipeline behind onboard form (PLAT-01) | Deferred | v1.1 start |
 | PRD-4 | Prometheus/Grafana/Loki/Trivy (OBS-01, OBS-02) | Deferred | PRD-1 start |
 | Final | AWS/EKS/Terraform (CLOUD-01) | Deferred | PRD-1 start |
 
 ## Session Continuity
 
-Last session: 2026-07-07 (04-03 verification + sign-off)
-Stopped at: Milestone v1.0 complete; next action is milestone audit/completion (/gsd-audit-milestone or /gsd-complete-milestone)
+Last session: 2026-07-08 (roadmap creation for v1.1)
+Stopped at: Roadmap written; next action is `/gsd:plan-phase 5`
 Resume file: none
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan Phase 5 with `/gsd:plan-phase 5`
