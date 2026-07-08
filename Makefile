@@ -12,9 +12,15 @@ TAG     ?= dev
 RELEASE ?= field-guide-api
 CHART   ?= charts/field-guide-api
 
+# launchpad image coordinates (namespaced LP_ prefix — never shadow field-guide-api)
+LP_IMAGE   ?= localhost:5001/launchpad
+LP_TAG     ?= dev
+LP_RELEASE ?= launchpad
+LP_CHART   ?= charts/launchpad
+
 # ─── Targets ──────────────────────────────────────────────────────────────────
-# Phase 1: test | Phase 2: cluster-up, cluster-down | Phase 3: build, load, deploy, undeploy | Phase 4: help, up, check-tools, port-forward, smoke, clean, clean-venv, reset-local
-.PHONY: test cluster-up cluster-down build load deploy undeploy help up check-tools port-forward smoke clean clean-venv reset-local
+# Phase 1: test | Phase 2: cluster-up, cluster-down | Phase 3: build, load, deploy, undeploy | Phase 4: help, up, check-tools, port-forward, smoke, clean, clean-venv, reset-local | Phase 5: test-launchpad, build-launchpad, load-launchpad, deploy-launchpad, port-forward-launchpad, smoke-launchpad
+.PHONY: test cluster-up cluster-down build load deploy undeploy help up check-tools port-forward smoke clean clean-venv reset-local test-launchpad build-launchpad load-launchpad deploy-launchpad port-forward-launchpad smoke-launchpad
 
 .DEFAULT_GOAL := help
 
@@ -28,6 +34,31 @@ test: ## create local venv (idempotent), install dev-deps, run pytest with cover
 	VENV_PY=$$([ -x .venv/bin/python ] && echo .venv/bin/python || echo .venv/Scripts/python) && \
 	"$$VENV_PY" -m pip install -q -r requirements-dev.txt && \
 	"$$VENV_PY" -m pytest
+
+# ─── launchpad targets (Phase 5) ──────────────────────────────────────────────
+# test-launchpad works today; the deploy-related targets are guarded stubs until
+# Phase 8 (Helm chart + cluster deploy) and Phase 10 (smoke) fill them in place.
+test-launchpad: ## create launchpad venv (idempotent), install dev-deps, run pytest with coverage
+	cd apps/launchpad && \
+	{ [ -d .venv ] || $(PYTHON) -m venv .venv; } && \
+	VENV_PY=$$([ -x .venv/bin/python ] && echo .venv/bin/python || echo .venv/Scripts/python) && \
+	"$$VENV_PY" -m pip install -q -r requirements-dev.txt && \
+	"$$VENV_PY" -m pytest
+
+build-launchpad: ## (stub) build launchpad image — available in Phase 8 (Helm chart + cluster deploy)
+	@echo "build-launchpad: available in Phase 8 (Helm chart + cluster deploy)"
+
+load-launchpad: ## (stub) push launchpad image to local registry — available in Phase 8
+	@echo "load-launchpad: available in Phase 8 (Helm chart + cluster deploy)"
+
+deploy-launchpad: ## (stub) helm install launchpad — available in Phase 8
+	@echo "deploy-launchpad: available in Phase 8 (Helm chart + cluster deploy)"
+
+port-forward-launchpad: ## (stub) forward launchpad svc to localhost — available in Phase 8
+	@echo "port-forward-launchpad: available in Phase 8 (Helm chart + cluster deploy)"
+
+smoke-launchpad: ## (stub) smoke-test launchpad endpoints — available in Phase 10
+	@echo "smoke-launchpad: available in Phase 10 (end-to-end smoke)"
 
 cluster-up: ## create kind cluster + local registry (idempotent)
 	bash scripts/cluster-setup.sh
