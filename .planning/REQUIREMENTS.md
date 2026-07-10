@@ -24,7 +24,7 @@ Requirements for milestone v1.1 (PRD-3 Product Dashboard). Each maps to a roadma
 
 - [ ] **STAT-01**: `GET /api/status` returns real platform status — API health, MongoDB status, app/version info, registered-service count, and a metrics preview
 - [ ] **STAT-02**: Platform status reflects field-guide-api reachability over the cluster network and degrades gracefully (no crash, shown as a degraded card) when it is unreachable
-- [ ] **STAT-03**: `GET /health` readiness checks only the launchpad pod's own MongoDB — never downstream services — returning 503 when its own DB is unreachable
+- [x] **STAT-03**: `GET /health` readiness checks only the launchpad pod's own MongoDB — never downstream services — returning 503 when its own DB is unreachable
 - [ ] **STAT-04**: `/metrics` exposes Prometheus-format metrics for the dashboard app (PRD-4 scrape seam, parity with field-guide-api)
 
 ### Service Catalog
@@ -111,7 +111,7 @@ Which phases cover which requirements. Phase assignments populated during roadma
 | UI-05 | Phase 6 | Complete |
 | STAT-01 | Phase 7 | Pending |
 | STAT-02 | Phase 7 | Pending |
-| STAT-03 | Phase 7 | Pending |
+| STAT-03 | Phase 7 | Complete |
 | STAT-04 | Phase 7 | Pending |
 | CAT-01 | Phase 9 | Pending |
 | CAT-02 | Phase 9 | Pending |

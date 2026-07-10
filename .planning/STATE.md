@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Product Dashboard
-status: completed
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-07-10T21:53:49.745Z"
-last_activity: 2026-07-10 -- Phase 06 marked complete
+status: executing
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-07-10T23:07:22.717Z"
+last_activity: 2026-07-10
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
   percent: 33
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-08)
 
 **Core value:** `make up-all` brings up the kind cluster and both apps (field-guide-api + launchpad dashboard), making the platform demoable to a human reviewer in a browser at localhost:8081
-**Current focus:** Phase 06 — ui-layer-templates-static-assets
+**Current focus:** Phase 07 — status-api-field-guide-integration
 
 ## Current Position
 
-Phase: 06 — COMPLETE
+Phase: 07 (status-api-field-guide-integration) — EXECUTING
 Plan: 2 of 2
-Status: Phase 06 complete
-Last activity: 2026-07-10 -- Phase 06 marked complete
+Status: Ready to execute
+Last activity: 2026-07-10
 
-Progress: [██████████] 100%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [██████████] 100%
 | Phase 05 P01 | 24min | 2 tasks | 18 files |
 | Phase 06 P01 | 9min | 2 tasks | 4 files |
 | Phase 06 P02 | 22min | 3 tasks | 13 files |
+| Phase 07 P01 | 12min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,7 @@ Recent decisions affecting current work:
 - [Phase 06]: Resolved RESEARCH Open Question 1 (active sidebar-nav visibility) via explicit .sidebar a[aria-current="page"] CSS override in style.css
 - [Phase 06]: Phase 6 Plan 1 (06-01): human checkpoint T-06-SC (vendored asset supply-chain provenance) approved — htmx 2.0.10 and Pico CSS 2.1.1 verified genuine before commit
 - [Phase 06]: Phase 06 Plan 2 (06-02): Implemented pages_bp/partials_bp blueprints, base.html shell, four page templates, status-cards fragment verbatim against 06-PATTERNS.md/06-RESEARCH.md pinned target code - no deviation needed
+- [Phase 07]: Phase 07 Plan 1 (07-01): mongo singleton, config keys, and /health readiness check wired verbatim from field-guide-api pattern per 07-PATTERNS.md; no structural deviation
 
 ### Pending Todos
 
@@ -101,8 +103,8 @@ None yet — roadmap freshly created.
 
 ## Session Continuity
 
-Last session: 2026-07-10T21:37:59.792Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-07-10T23:07:22.710Z
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

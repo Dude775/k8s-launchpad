@@ -70,7 +70,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   4. The status card htmx fragment route returns an HTML partial when the `HX-Request` header is present and a full page otherwise; unit tests confirm this behavior
   5. `make test-launchpad` continues to pass at 100% coverage with all new routes exercised by mocked-requests unit tests
 **Plans**: 2 plans
-  - [ ] 07-01-PLAN.md — Flask-PyMongo wiring + config keys + /health own-Mongo readiness (200/503) + mongomock test harness [STAT-03]
+  - [x] 07-01-PLAN.md — Flask-PyMongo wiring + config keys + /health own-Mongo readiness (200/503) + mongomock test harness [STAT-03]
   - [ ] 07-02-PLAN.md — get_platform_status() helper + /api/status JSON + HX-Request status-cards fragment + /metrics parity test [STAT-01, STAT-02, STAT-04]
 
 ### Phase 8: Helm Chart + K8s Diagnostics
@@ -120,7 +120,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 4. Makefile + Documentation | v1.0 | 3/3 | Complete | 2026-07-07 |
 | 5. Monorepo Scaffold + App Factory | v1.1 | 2/2 | Complete   | 2026-07-08 |
 | 6. UI Layer — Templates + Static Assets | v1.1 | 2/2 | Complete   | 2026-07-10 |
-| 7. Status API + Field-Guide Integration | v1.1 | 0/2 | Planned | - |
+| 7. Status API + Field-Guide Integration | v1.1 | 1/2 | In Progress|  |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 0/? | Not started | - |
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 0/? | Not started | - |
 | 10. Makefile Integration + Smoke + Docs | v1.1 | 0/? | Not started | - |
