@@ -57,9 +57,11 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     from app.routes.health import health_bp  # noqa: PLC0415
     from app.routes.pages import pages_bp  # noqa: PLC0415
     from app.routes.partials import partials_bp  # noqa: PLC0415
+    from app.routes.status import status_bp  # noqa: PLC0415
 
     app.register_blueprint(health_bp)
     app.register_blueprint(pages_bp)
     app.register_blueprint(partials_bp)
+    app.register_blueprint(status_bp)
 
     return app
