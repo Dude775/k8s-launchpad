@@ -18,7 +18,7 @@ Requirements for milestone v1.1 (PRD-3 Product Dashboard). Each maps to a roadma
 - [ ] **UI-02**: Every page renders inside a consistent UI shell with sidebar navigation and a topbar
 - [ ] **UI-03**: The landing page shows platform status cards backed by live data from the status API (not hardcoded values)
 - [ ] **UI-04**: Status cards refresh in the browser without a full page reload (htmx polling, ≥10s interval, paused when the tab is hidden)
-- [ ] **UI-05**: All front-end assets (htmx, CSS) are vendored locally — the dashboard renders fully with no internet/CDN access
+- [x] **UI-05**: All front-end assets (htmx, CSS) are vendored locally — the dashboard renders fully with no internet/CDN access
 
 ### Platform Status
 
@@ -108,7 +108,7 @@ Which phases cover which requirements. Phase assignments populated during roadma
 | UI-02 | Phase 6 | Pending |
 | UI-03 | Phase 6 | Pending |
 | UI-04 | Phase 6 | Pending |
-| UI-05 | Phase 6 | Pending |
+| UI-05 | Phase 6 | Complete |
 | STAT-01 | Phase 7 | Pending |
 | STAT-02 | Phase 7 | Pending |
 | STAT-03 | Phase 7 | Pending |

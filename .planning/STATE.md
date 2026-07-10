@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Product Dashboard
 status: executing
-stopped_at: Phase 06 UI-SPEC approved
-last_updated: "2026-07-10T21:09:02.823Z"
-last_activity: 2026-07-10 -- Phase 06 execution started
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-07-10T21:26:27.141Z"
+last_activity: 2026-07-10
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 17
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 ## Current Position
 
 Phase: 06 (ui-layer-templates-static-assets) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 06
-Last activity: 2026-07-10 -- Phase 06 execution started
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-07-10
 
-Progress: [██░░░░░░░░] 17% (1/6 phases)
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [██░░░░░░░░] 17% (1/6 phases)
 
 *Updated after each plan completion*
 | Phase 05 P01 | 24min | 2 tasks | 18 files |
+| Phase 06 P01 | 9min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,8 @@ Recent decisions affecting current work:
 - Roadmap: DEP-01/02 (Helm chart + RBAC) in Phase 8, DEP-03 (MongoDB manifests) in Phase 9, DEP-04/05 (Makefile targets + smoke) in Phase 10 — split is intentional per research ordering
 - Roadmap: UI hint applied to Phase 6 (UI shell) and Phase 9 (catalog forms/detail pages)
 - [Phase 05]: test_k8s.py isolates HOME/USERPROFILE to stay hermetic against a real dev-machine kubeconfig (RESEARCH Pitfall 2) — confirmed necessary during Task 2 verification on this machine
+- [Phase 06]: Resolved RESEARCH Open Question 1 (active sidebar-nav visibility) via explicit .sidebar a[aria-current="page"] CSS override in style.css
+- [Phase 06]: Phase 6 Plan 1 (06-01): human checkpoint T-06-SC (vendored asset supply-chain provenance) approved — htmx 2.0.10 and Pico CSS 2.1.1 verified genuine before commit
 
 ### Pending Todos
 
@@ -96,9 +99,9 @@ None yet — roadmap freshly created.
 
 ## Session Continuity
 
-Last session: 2026-07-10T20:42:46.753Z
-Stopped at: Phase 06 UI-SPEC approved
-Resume file: .planning/phases/06-ui-layer-templates-static-assets/06-UI-SPEC.md
+Last session: 2026-07-10T21:26:27.135Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
