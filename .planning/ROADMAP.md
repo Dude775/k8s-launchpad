@@ -53,7 +53,9 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   3. `static/vendor/htmx.min.js` and `static/vendor/pico.min.css` are present; the page loads completely with no outbound CDN requests (network disconnected test passes)
   4. Status cards on the landing page show a degraded/unknown state (not a 500 error or empty page) when the backing status API returns no data
   5. An htmx polling attribute is present on the status cards section with an interval of 10 seconds or longer and a visibility guard that pauses polling when the browser tab is hidden
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 06-01-PLAN.md — vendor htmx 2.0.10 + Pico 2.1.1 offline assets, style.css overrides, asset-presence test (human-verify gate) [UI-05]
+  - [ ] 06-02-PLAN.md — pages + partials blueprints, base shell + 4 pages + status-cards fragment, htmx polling contract, route tests [UI-01, UI-02, UI-03, UI-04]
 **UI hint**: yes
 
 ### Phase 7: Status API + Field-Guide Integration
@@ -114,7 +116,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 3. Containerization + Helm Deployment | v1.0 | 4/4 | Complete | 2026-07-06 |
 | 4. Makefile + Documentation | v1.0 | 3/3 | Complete | 2026-07-07 |
 | 5. Monorepo Scaffold + App Factory | v1.1 | 2/2 | Complete   | 2026-07-08 |
-| 6. UI Layer — Templates + Static Assets | v1.1 | 0/? | Not started | - |
+| 6. UI Layer — Templates + Static Assets | v1.1 | 0/2 | Planned | - |
 | 7. Status API + Field-Guide Integration | v1.1 | 0/? | Not started | - |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 0/? | Not started | - |
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 0/? | Not started | - |
