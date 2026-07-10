@@ -104,13 +104,23 @@ def mongo_down(client, monkeypatch):
 
 @pytest.fixture
 def mock_requests_get(monkeypatch):
-    """Placeholder pattern for mocking `requests.get` ahead of Phase 7's
-    field-guide-api reachability check (STAT-02). No Phase 5 route calls
-    `requests` yet — this fixture exists so the conftest module already
-    demonstrates the mocking shape D-02 asks for, ready for Phase 7 to use.
-    """
+    """Mock a successful `requests.get` call (field-guide-api reachable,
+    STAT-02) — returns status_code=200."""
     import requests
 
     fake_response = MagicMock(status_code=200, json=lambda: {})
     monkeypatch.setattr(requests, "get", lambda *a, **kw: fake_response)
     return fake_response
+
+
+@pytest.fixture
+def mock_requests_get_unreachable(monkeypatch):
+    """Mock a failing `requests.get` call (field-guide-api unreachable,
+    STAT-02) — raises requests.exceptions.ConnectionError, exercising
+    get_platform_status()'s degrade-gracefully branch."""
+    import requests
+
+    def _raise(*args, **kwargs):
+        raise requests.exceptions.ConnectionError("connection refused")
+
+    monkeypatch.setattr(requests, "get", _raise)
