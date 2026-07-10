@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>k8s-launchpad</h1>
+<section id="status-cards"
+         hx-get="{{ url_for('partials.status_cards') }}"
+         hx-trigger="load, every 15s [document.visibilityState === 'visible'], visibilitychange[document.visibilityState === 'visible'] from:document"
+         hx-swap="innerHTML">
+  <!-- Server-rendered fallback for the very first paint before htmx's `load`
+       trigger fires (also what a no-JS browser sees) -->
+  <article class="status-card status-card--unknown">
+    <p>Loading platform status…</p>
+  </article>
+</section>
+{% endblock %}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Dashboard{% endblock %} - k8s-launchpad</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/pico.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='vendor/htmx.min.js') }}" defer></script>
+</head>
+<body>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Primary">
+      <ul>
+        <li><a href="{{ url_for('pages.index') }}"
+               {% if request.endpoint == 'pages.index' %}aria-current="page"{% endif %}>
+               Dashboard</a></li>
+        <li><a href="{{ url_for('pages.catalog') }}"
+               {% if request.endpoint == 'pages.catalog' %}aria-current="page"{% endif %}>
+               Catalog</a></li>
+        <li><a href="{{ url_for('pages.diagnostics') }}"
+               {% if request.endpoint == 'pages.diagnostics' %}aria-current="page"{% endif %}>
+               Diagnostics</a></li>
+        <li><a href="{{ url_for('pages.feed') }}"
+               {% if request.endpoint == 'pages.feed' %}aria-current="page"{% endif %}>
+               Activity Feed</a></li>
+      </ul>
+    </nav>
+    <div class="main">
+      <header class="topbar"><strong>k8s-launchpad</strong> — Internal Developer Platform</header>
+      <main>{% block content %}{% endblock %}</main>
+    </div>
+  </div>
+</body>
+</html>

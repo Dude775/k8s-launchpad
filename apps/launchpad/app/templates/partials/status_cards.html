@@ -1,0 +1,8 @@
+{% if status == "unknown" %}
+  <article aria-busy="false" class="status-card status-card--unknown">
+    <header>Status unavailable</header>
+    <p>The platform status API is not connected yet. This will populate automatically once available.</p>
+  </article>
+{% else %}
+  {# Phase 7 fills in real per-metric cards here #}
+{% endif %}
