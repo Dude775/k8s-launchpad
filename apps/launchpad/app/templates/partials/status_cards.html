@@ -1,8 +1,16 @@
-{% if status == "unknown" %}
-  <article aria-busy="false" class="status-card status-card--unknown">
-    <header>Status unavailable</header>
-    <p>The platform status API is not connected yet. This will populate automatically once available.</p>
-  </article>
-{% else %}
-  {# Phase 7 fills in real per-metric cards here #}
-{% endif %}
+<article class="status-card status-card--{{ 'ok' if status.mongo_status == 'up' else 'degraded' }}">
+  <header>MongoDB</header>
+  <p>{{ status.mongo_status }}</p>
+</article>
+<article class="status-card status-card--{{ 'ok' if status.field_guide_reachable else 'degraded' }}">
+  <header>Field Guide API</header>
+  <p>{{ 'reachable' if status.field_guide_reachable else 'unreachable' }}</p>
+</article>
+<article class="status-card status-card--{{ 'ok' if status.api_health == 'ok' else 'degraded' }}">
+  <header>Version</header>
+  <p>{{ status.app_version }}</p>
+</article>
+<article class="status-card status-card--{{ 'ok' if status.api_health == 'ok' else 'degraded' }}">
+  <header>Registered Services</header>
+  <p>{{ status.service_count }}</p>
+</article>
