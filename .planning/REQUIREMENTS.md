@@ -14,10 +14,10 @@ Requirements for milestone v1.1 (PRD-3 Product Dashboard). Each maps to a roadma
 
 ### Dashboard UI
 
-- [ ] **UI-01**: Developer sees a product landing/dashboard page at `/` that presents k8s-launchpad as an Internal Developer Platform
-- [ ] **UI-02**: Every page renders inside a consistent UI shell with sidebar navigation and a topbar
-- [ ] **UI-03**: The landing page shows platform status cards backed by live data from the status API (not hardcoded values)
-- [ ] **UI-04**: Status cards refresh in the browser without a full page reload (htmx polling, ≥10s interval, paused when the tab is hidden)
+- [x] **UI-01**: Developer sees a product landing/dashboard page at `/` that presents k8s-launchpad as an Internal Developer Platform
+- [x] **UI-02**: Every page renders inside a consistent UI shell with sidebar navigation and a topbar
+- [x] **UI-03**: The landing page shows platform status cards backed by live data from the status API (not hardcoded values)
+- [x] **UI-04**: Status cards refresh in the browser without a full page reload (htmx polling, ≥10s interval, paused when the tab is hidden)
 - [x] **UI-05**: All front-end assets (htmx, CSS) are vendored locally — the dashboard renders fully with no internet/CDN access
 
 ### Platform Status
@@ -104,10 +104,10 @@ Which phases cover which requirements. Phase assignments populated during roadma
 |-------------|-------|--------|
 | APP-01 | Phase 5 | Complete |
 | APP-02 | Phase 5 | Complete |
-| UI-01 | Phase 6 | Pending |
-| UI-02 | Phase 6 | Pending |
-| UI-03 | Phase 6 | Pending |
-| UI-04 | Phase 6 | Pending |
+| UI-01 | Phase 6 | Complete |
+| UI-02 | Phase 6 | Complete |
+| UI-03 | Phase 6 | Complete |
+| UI-04 | Phase 6 | Complete |
 | UI-05 | Phase 6 | Complete |
 | STAT-01 | Phase 7 | Pending |
 | STAT-02 | Phase 7 | Pending |
