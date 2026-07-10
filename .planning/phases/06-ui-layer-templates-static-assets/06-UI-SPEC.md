@@ -77,6 +77,18 @@ Accent reserved for: active sidebar/topbar nav link state, the landing page's pr
 
 ---
 
+## Visual Hierarchy
+
+**Primary focal point (landing page `/`):** the status-cards section. It carries the live platform data (UI-03/UI-04), is the only region that updates via htmx polling, and is what a human reviewer should read first to judge platform health. It sits in the upper content area of `<main>`, directly below the `<h1>` hero title, separated from the hero by the `2xl` (48px) section break so it reads as the dominant content block.
+
+**Secondary:** the sidebar navigation (persistent orientation/wayfinding, accent only on the active link) and the topbar brand label. These frame the page but must not out-weight the status cards visually — sidebar/topbar use the secondary (30%) surface color and never the accent fill.
+
+**Tertiary:** the hero title and any supporting descriptive copy — present for context and IDP framing (UI-01), but deliberately quiet (Display weight 600, no accent) so they orient without competing with the status cards for attention.
+
+Executor rule: when two elements compete for emphasis on the landing page, the status-cards section wins. Do not add accent color, heavier weight, or larger size to sidebar/topbar/hero in a way that would pull the eye away from the status cards.
+
+---
+
 ## Copywriting Contract
 
 | Element | Copy |
