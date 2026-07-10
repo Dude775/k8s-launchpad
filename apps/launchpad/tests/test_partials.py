@@ -1,16 +1,48 @@
 """
 htmx partial-fragment route tests.
 
-Covers the degraded-state contract for GET /partials/status-cards (UI-03/UI-04):
-always 200, never a full page, never a 500, even before Phase 7 wires real data.
+Covers GET /partials/status-cards (STAT-01/02): a fragment when HX-Request
+is present, a full page (status_full_page.html) otherwise, both rendering
+real per-metric cards from get_platform_status() with a degraded state when
+field-guide-api is unreachable — never a 500, never an empty body.
 """
 
 
-def test_status_cards_degraded_when_no_data(client):
-    """GET /partials/status-cards always returns 200 with the unknown/degraded
-    empty-state fragment in Phase 6 — no data source exists yet (never 500)."""
+def test_status_cards_fragment_when_hx_request_present(client, mock_requests_get):
+    """GET /partials/status-cards with HX-Request: true returns a fragment
+    (no <html> / no <!doctype>)."""
+    resp = client.get("/partials/status-cards", headers={"HX-Request": "true"})
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "<html" not in body
+    assert "<!doctype" not in body.lower()
+
+
+def test_status_cards_full_page_when_no_hx_request(client, mock_requests_get):
+    """GET /partials/status-cards with NO HX-Request header returns a full
+    page (contains <html> and the base.html shell)."""
     resp = client.get("/partials/status-cards")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "Status unavailable" in body
-    assert "<html" not in body  # fragment only, never a full page (RESEARCH Pitfall 3)
+    assert "<html" in body
+
+
+def test_status_cards_degraded_when_field_guide_unreachable(client, mock_requests_get_unreachable):
+    """The rendered fragment shows a degraded card when field_guide_reachable
+    is False (never a 500 or empty body)."""
+    resp = client.get("/partials/status-cards", headers={"HX-Request": "true"})
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "status-card--degraded" in body
+    assert "unreachable" in body
+
+
+def test_status_cards_shows_mongo_version_and_service_count(client, mock_requests_get):
+    """The rendered fragment shows a mongo up/down card and the app_version
+    and service_count values."""
+    resp = client.get("/partials/status-cards", headers={"HX-Request": "true"})
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "up" in body
+    assert "dev" in body  # default APP_VERSION
+    assert ">0<" in body  # service_count default (empty services collection)
