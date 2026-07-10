@@ -3,10 +3,13 @@ Application factory structural tests.
 
 Behavior under test:
 - create_app() is importable and callable, registers health_bp, wires metrics
-- Config has no MONGO_* attrs (D-02 — Mongo deferred)
+- create_app() constructs successfully with no live MongoDB (no crash at
+  init_app time) and wires the mongo singleton with a 2000ms timeout (STAT-03)
+- Config exposes MONGO_URI (launchpad's own DB — Phase 7 wiring)
 - Config.DEBUG defaults to False unless FLASK_DEBUG env is truthy
 - _env_flag truthy/falsy parsing
 - extensions.metrics is a PrometheusMetrics instance
+- extensions.mongo is a PyMongo instance
 """
 
 
@@ -30,12 +33,23 @@ def test_create_app_returns_flask_app():
     assert "health" in app.blueprints
 
 
-def test_config_has_no_mongo_attrs():
-    """Config must NOT expose MONGO_URI/MONGO_DBNAME — deferred to Phase 7/9 (D-02)."""
+def test_config_has_mongo_uri():
+    """Config must expose MONGO_URI, defaulting to launchpad's own DB (Phase 7)."""
     from app.config import Config
 
-    assert not hasattr(Config, "MONGO_URI")
-    assert not hasattr(Config, "MONGO_DBNAME")
+    assert hasattr(Config, "MONGO_URI")
+    assert Config.MONGO_URI.endswith("/launchpad")
+
+
+def test_create_app_constructs_with_no_live_mongo():
+    """create_app() must not crash at init_app time even with no live MongoDB
+    listening (Pitfall 3) — mongo.init_app() only eagerly parses the URI, it
+    does not connect."""
+    from app import create_app
+
+    app = create_app({"TESTING": True})
+
+    assert app is not None
 
 
 def test_config_debug_defaults_false(monkeypatch):
@@ -77,3 +91,12 @@ def test_extensions_metrics_singleton():
     from app.extensions import metrics
 
     assert isinstance(metrics, PrometheusMetrics)
+
+
+def test_extensions_mongo_singleton():
+    """extensions.mongo must be a PyMongo instance."""
+    from flask_pymongo import PyMongo
+
+    from app.extensions import mongo
+
+    assert isinstance(mongo, PyMongo)

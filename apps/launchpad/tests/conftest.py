@@ -1,23 +1,47 @@
 """
-Test fixtures providing an isolated Flask test app with a mocked K8s client.
+Test fixtures providing an isolated Flask test app with a mocked K8s client
+and in-memory MongoDB.
 
-No real cluster or kubeconfig is used in any test. The K8s client is mocked
-by monkeypatching app.k8s.get_k8s_clients directly (module-level function
-replacement), the same monkeypatch-and-auto-restore discipline field-guide-api
-uses for its mongomock injection.
+No real cluster, kubeconfig, or MongoDB/network is used in any test. The K8s
+client is mocked by monkeypatching app.k8s.get_k8s_clients directly
+(module-level function replacement). MongoDB is simulated via mongomock,
+injected by monkeypatching the cx and db instance attributes on the shared
+PyMongo singleton (Flask-PyMongo 3.x stores both directly on the PyMongo
+instance, not in app.extensions) — mirrors apps/field-guide-api/tests/conftest.py.
 """
 
 from unittest.mock import MagicMock
 
+import mongomock
 import pytest
 
 
 @pytest.fixture
-def app():
-    """Isolated Flask test app — no cluster, no Mongo required for Phase 5."""
-    from app import create_app
+def app(monkeypatch):
+    """Isolated Flask test app with in-memory MongoDB (no network).
 
-    application = create_app({"TESTING": True})
+    Flask-PyMongo 3.x init_app() sets self.cx and self.db directly on the
+    PyMongo singleton. We replace both with mongomock equivalents after
+    create_app() returns, so all subsequent DB access goes through the
+    in-memory store. monkeypatch restores originals after each test.
+    """
+    from app import create_app
+    from app.extensions import mongo
+
+    application = create_app(
+        {
+            "TESTING": True,
+            "MONGO_URI": "mongodb://localhost:27017/test_db",
+        }
+    )
+
+    mock_client = mongomock.MongoClient()
+    mock_db = mock_client["test_db"]
+
+    # Patch the singleton's instance attributes; monkeypatch auto-restores on teardown.
+    monkeypatch.setattr(mongo, "cx", mock_client)
+    monkeypatch.setattr(mongo, "db", mock_db)
+
     yield application
 
 
@@ -51,6 +75,31 @@ def k8s_enabled(monkeypatch):
     fake_apps_v1 = MagicMock(name="AppsV1Api")
     monkeypatch.setattr(k8s_module, "get_k8s_clients", lambda: (fake_core_v1, fake_apps_v1))
     return fake_core_v1, fake_apps_v1
+
+
+@pytest.fixture
+def mongo_down(client, monkeypatch):
+    """Test client that simulates a MongoDB outage.
+
+    Patches the mongo reference inside health.py so that
+    mongo.cx.admin.command("ping") raises ConnectionFailure, causing
+    GET /health to return 503. Mirrors
+    apps/field-guide-api/tests/conftest.py's mongo_down fixture.
+    """
+    import pymongo.errors
+    import app.routes.health as health_module
+
+    class _FakeCx:
+        class admin:
+            @staticmethod
+            def command(*args, **kwargs):
+                raise pymongo.errors.ConnectionFailure("MongoDB unreachable")
+
+    class _FakeMongo:
+        cx = _FakeCx()
+
+    monkeypatch.setattr(health_module, "mongo", _FakeMongo())
+    return client
 
 
 @pytest.fixture
