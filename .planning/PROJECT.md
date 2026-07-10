@@ -114,11 +114,13 @@ This document evolves at phase transitions and milestone boundaries.
 
 **v1.0 Foundation shipped 2026-07-07.** The full local build-to-deploy loop works end to end: `make up` (cluster-up → build → load → deploy) produces a running Flask field-guide API on kind, backed by in-cluster MongoDB, confirmed by `make smoke` (200 on /health, /entries, /metrics) and human sign-off. Codebase: ~1,360 LOC of app/chart/script source, 32 tests at 100% coverage, 114 commits over 4 days. All PRD-2/3/4 seams in place: `/metrics` endpoint, generic values.yaml, `infra/argocd/` and `infra/observability/` directories.
 
-Known tech debt: README /health example shows compact JSON while Flask emits spaced JSON (cosmetic); MongoDB runs with a committed local-dev password (acceptable for local kind only, warned in NOTES.txt).
+**v1.1 progress:** Phases 5–7 complete. Phase 7 (Status API + Field-Guide Integration) defined the platform status contract — launchpad's own `mongo` singleton is wired, `/health` is a real Kubernetes-readinessProbe-safe Mongo ping (200/503, never touches field-guide-api), and `/api/status` surfaces `api_health`, `mongo_status`, `app_version`, `service_count`, and `field_guide_reachable` (degrades gracefully, never 500s, when field-guide-api is unreachable). STAT-01..04 validated; launchpad suite at 37 tests / 100% coverage.
+
+Known tech debt: README /health example shows compact JSON while Flask emits spaced JSON (cosmetic); MongoDB runs with a committed local-dev password (acceptable for local kind only, warned in NOTES.txt); status-card `--ok/--degraded/--unknown` CSS modifiers have no rules in style.css yet (WR-01, Phase 7 review) — degraded state does not visually render, to be addressed in a UI pass.
 
 ## Next Milestone Goals
 
 After v1.1 (PRD-3 Product Dashboard): PRD-2 GitOps — ArgoCD syncs deployments from Git (GITOPS-01). Later: PRD-4 observability/security, final PRD AWS/EKS.
 
 ---
-*Last updated: 2026-07-07 — milestone v1.1 Product Dashboard started*
+*Last updated: 2026-07-10 — Phase 7 (Status API + Field-Guide Integration) complete*
