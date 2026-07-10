@@ -24,7 +24,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 - [x] **Phase 5: Monorepo Scaffold + App Factory** — launchpad Flask app structure and test harness pass without a cluster (completed 2026-07-08)
 - [x] **Phase 6: UI Layer — Templates + Static Assets** — browser dashboard shell renders with vendored assets and sidebar navigation
  (completed 2026-07-10)
-- [ ] **Phase 7: Status API + Field-Guide Integration** — platform status contract defined; /health safe for Kubernetes readinessProbe
+- [x] **Phase 7: Status API + Field-Guide Integration** — platform status contract defined; /health safe for Kubernetes readinessProbe (completed 2026-07-10)
 - [ ] **Phase 8: Helm Chart + K8s Diagnostics** — launchpad deploys to kind via Helm with RBAC; diagnostics page shows live cluster state
 - [ ] **Phase 9: Service Catalog + Events / MongoDB CRUD** — developers can register and deregister services; events feed is bounded by TTL
 - [ ] **Phase 10: Makefile Integration + Smoke + Docs** — make up-all delivers both apps; dashboard is demoable to a human reviewer
@@ -71,7 +71,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   5. `make test-launchpad` continues to pass at 100% coverage with all new routes exercised by mocked-requests unit tests
 **Plans**: 2 plans
   - [x] 07-01-PLAN.md — Flask-PyMongo wiring + config keys + /health own-Mongo readiness (200/503) + mongomock test harness [STAT-03]
-  - [ ] 07-02-PLAN.md — get_platform_status() helper + /api/status JSON + HX-Request status-cards fragment + /metrics parity test [STAT-01, STAT-02, STAT-04]
+  - [x] 07-02-PLAN.md — get_platform_status() helper + /api/status JSON + HX-Request status-cards fragment + /metrics parity test [STAT-01, STAT-02, STAT-04]
 
 ### Phase 8: Helm Chart + K8s Diagnostics
 **Goal**: The launchpad deploys to the kind cluster via Helm with correct label namespacing and RBAC; the diagnostics page shows real Kubernetes state inside the cluster and degrades gracefully outside it
@@ -120,7 +120,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 4. Makefile + Documentation | v1.0 | 3/3 | Complete | 2026-07-07 |
 | 5. Monorepo Scaffold + App Factory | v1.1 | 2/2 | Complete   | 2026-07-08 |
 | 6. UI Layer — Templates + Static Assets | v1.1 | 2/2 | Complete   | 2026-07-10 |
-| 7. Status API + Field-Guide Integration | v1.1 | 1/2 | In Progress|  |
+| 7. Status API + Field-Guide Integration | v1.1 | 2/2 | Complete   | 2026-07-10 |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 0/? | Not started | - |
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 0/? | Not started | - |
 | 10. Makefile Integration + Smoke + Docs | v1.1 | 0/? | Not started | - |

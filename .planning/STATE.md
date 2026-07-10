@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Product Dashboard
-status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-07-10T23:07:22.717Z"
+status: verifying
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-07-10T23:33:24.278Z"
 last_activity: 2026-07-10
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 5
-  percent: 33
+  completed_plans: 6
+  percent: 50
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 
 Phase: 07 (status-api-field-guide-integration) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-10
 
-Progress: [████████░░] 83%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [████████░░] 83%
 | Phase 06 P01 | 9min | 2 tasks | 4 files |
 | Phase 06 P02 | 22min | 3 tasks | 13 files |
 | Phase 07 P01 | 12min | 3 tasks | 10 files |
+| Phase 07 P02 | 34min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 06]: Phase 6 Plan 1 (06-01): human checkpoint T-06-SC (vendored asset supply-chain provenance) approved — htmx 2.0.10 and Pico CSS 2.1.1 verified genuine before commit
 - [Phase 06]: Phase 06 Plan 2 (06-02): Implemented pages_bp/partials_bp blueprints, base.html shell, four page templates, status-cards fragment verbatim against 06-PATTERNS.md/06-RESEARCH.md pinned target code - no deviation needed
 - [Phase 07]: Phase 07 Plan 1 (07-01): mongo singleton, config keys, and /health readiness check wired verbatim from field-guide-api pattern per 07-PATTERNS.md; no structural deviation
+- [Phase 07]: Phase 07 Plan 2 (07-02): get_platform_status() single helper feeds both /api/status JSON and the status-cards fragment; sourced FIELD_GUIDE_BASE_URL/APP_VERSION from current_app.config for override testability
+- [Phase 07]: /partials/status-cards evolved to branch on HX-Request (fragment vs full page via status_full_page.html) — a deliberate, documented change from Phase 6's no-branch contract per STAT success criterion 4
 
 ### Pending Todos
 
@@ -103,8 +106,8 @@ None yet — roadmap freshly created.
 
 ## Session Continuity
 
-Last session: 2026-07-10T23:07:22.710Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-07-10T23:33:24.271Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
