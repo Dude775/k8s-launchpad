@@ -1,0 +1,36 @@
+/* Companion stylesheet — Pico CSS custom-property overrides.
+   Loaded in base.html AFTER vendor/pico.min.css so these overrides win the
+   cascade. See .planning/phases/06-ui-layer-templates-static-assets/06-UI-SPEC.md
+   (Color / Typography / Spacing tables) for the source of truth on these values. */
+
+:root {
+  --pico-primary: #2563eb;
+  --pico-del-color: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pico-primary: #3b82f6;
+  }
+}
+
+/* Resolves RESEARCH.md Open Question 1 / UI-SPEC.md fallback: ensure active
+   sidebar nav link is visually distinct even if Pico's shipped nav CSS only
+   styles aria-current for horizontal/breadcrumb nav, not sidebar <ul><li>. */
+.sidebar a[aria-current="page"] {
+  font-weight: 600;
+  color: var(--pico-primary);
+}
+
+/* Heading weight override — UI-SPEC.md Typography: Pico default is 700,
+   this phase pins headings to 600 for a flatter platform-engineering look. */
+h1, h2, h3 {
+  font-weight: 600;
+}
+
+/* Sidebar nav link minimum touch target — UI-SPEC.md Spacing Scale exception
+   (44px, not a multiple of 4, WCAG 2.5.5). */
+.sidebar a {
+  display: block;
+  min-height: 44px;
+}
