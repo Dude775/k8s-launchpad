@@ -59,7 +59,7 @@ def get_platform_status() -> dict:
     field-guide-api and must degrade gracefully when it is unreachable.
 
     Returns a dict with exactly six keys: api_health, mongo_status,
-    app_version, service_count, field_guide_healthy, metrics_preview.
+    app_version, service_count, field_guide_reachable, metrics_preview.
     Exception detail is always discarded — never str(exception) — so no
     hostname, stack trace, or connection-string fragment leaks into the
     JSON or HTML representations (T-07-07).
@@ -71,18 +71,13 @@ def get_platform_status() -> dict:
     except Exception:
         pass
 
-    # field_guide_healthy encodes "field-guide-api returned HTTP 200 from its
-    # /health probe" — NOT bare network reachability. A reachable-but-503
-    # response (e.g. field-guide's own MongoDB is down) is correctly reported
-    # as unhealthy. The name matches that HTTP-200 semantic (WR-03); Phase 8
-    # consumes this key on the /api/status contract.
-    field_guide_healthy = False
+    field_guide_reachable = False
     base_url = current_app.config["FIELD_GUIDE_BASE_URL"]
     try:
         resp = requests.get(f"{base_url}/health", timeout=FIELD_GUIDE_TIMEOUT_SECONDS)
-        field_guide_healthy = resp.status_code == 200
+        field_guide_reachable = resp.status_code == 200
     except requests.exceptions.RequestException:
-        field_guide_healthy = False
+        field_guide_reachable = False
 
     service_count = 0
     try:
@@ -98,6 +93,6 @@ def get_platform_status() -> dict:
         "mongo_status": mongo_status,
         "app_version": current_app.config["APP_VERSION"],
         "service_count": service_count,
-        "field_guide_healthy": field_guide_healthy,
+        "field_guide_reachable": field_guide_reachable,
         "metrics_preview": _metrics_preview(),
     }
