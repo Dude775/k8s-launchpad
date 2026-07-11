@@ -79,7 +79,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 **Requirements**: DEP-01, DEP-02, DIAG-01, DIAG-02
 **Success Criteria** (what must be TRUE):
   1. `helm lint charts/launchpad/` passes with no warnings; `_helpers.tpl` uses the `launchpad.*` prefix so installing both charts into the same namespace produces no label selector collision
-  2. `make build-launchpad load-launchpad deploy-launchpad` completes without error and the launchpad pod reaches Running state in the kind cluster
+  2. The chart deploys clean via the manual loop — hand-run `docker build` + `kind load` (or registry push) + `helm install` — and the launchpad pod reaches Running state in the kind cluster (Phase 10 wraps this loop in `make build-launchpad load-launchpad deploy-launchpad` per DEP-04)
   3. The diagnostics page at `/diagnostics` lists pods and deployments from the Kubernetes API when accessed inside the cluster; it shows a static "outside cluster" indicator (not a 500) when run locally without a kubeconfig
   4. The Deployment spec includes `serviceAccountName: launchpad` and the namespace-scoped Role grants only `get`/`list`/`watch` on `pods` and `deployments` (not ClusterRole)
   5. All K8s API calls use `_request_timeout=5` to prevent the single gunicorn worker from stalling on a hung socket

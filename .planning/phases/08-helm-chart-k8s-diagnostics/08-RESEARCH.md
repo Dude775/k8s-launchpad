@@ -165,7 +165,10 @@ charts/launchpad/                     # NEW — mirror of charts/field-guide-api
 import os
 import urllib3
 from kubernetes.client.exceptions import ApiException
-from app.k8s import get_k8s_clients
+from app import k8s  # module import, NOT `from app.k8s import get_k8s_clients` —
+                     # conftest monkeypatches app.k8s.get_k8s_clients; a from-import
+                     # binds the original function and the patch never reaches it
+                     # (plan-check BLOCKER 3, 2026-07-11)
 
 K8S_REQUEST_TIMEOUT_SECONDS = 5  # SC #5 — every list call passes this
 
@@ -175,7 +178,7 @@ def _pod_ready_counts(pod):
     return ready, len(statuses)
 
 def get_cluster_state() -> dict:
-    core_v1, apps_v1 = get_k8s_clients()
+    core_v1, apps_v1 = k8s.get_k8s_clients()
     if core_v1 is None:                       # (a) outside cluster (D-03) — NOT an error
         return {"available": False}
 
@@ -516,7 +519,8 @@ All branches are mockable with zero real cluster/network, satisfying `--cov-fail
 
 ## Open Questions
 
-1. **Is SC #2 (pod reaches Running) verified in Phase 8 or deferred to Phase 10?**
+1. **[RESOLVED 2026-07-11, user decision]** Phase 8 verifies "pod reaches Running" via the manual loop (hand-run docker build + kind load + helm install); Phase 10 wraps it in `make` targets (DEP-04). ROADMAP SC #2 amended accordingly. Original question:
+   **Is SC #2 (pod reaches Running) verified in Phase 8 or deferred to Phase 10?**
    - What we know: The Makefile targets (`build-launchpad`/`load-launchpad`/`deploy-launchpad`) that automate it are explicitly Phase 10 (DEP-04). SC #2 names those exact targets.
    - What's unclear: Whether Phase 8's DoD includes a manual `docker build` + `kind load docker-image localhost:5001/launchpad:latest` + `helm install` to prove Running, or whether SC #2 is exercised in Phase 10.
    - Recommendation: Author + `helm lint` + full unit-test the chart in Phase 8; treat the live-cluster "reaches Running" check as a manual verification step here (the loop can be run by hand) and let Phase 10 wrap it in `make`. Flag for the planner to confirm the DoD boundary.

@@ -62,6 +62,13 @@ service catalog / events CRUD (Phase 9); Makefile `up-all` + smoke integration (
   **SC #2 only requires the pod to reach `Running`**, not `Ready`. Do NOT weaken the probe to a
   Mongo-free endpoint or defer it; the contract is exercised as designed.
 
+### SC #2 delivery boundary (resolved 2026-07-11, user decision via plan-check)
+- **D-09:** SC #2 ("pod reaches Running") is verified in Phase 8 via the **manual loop** — hand-run
+  `docker build` + `kind load` (or registry push) + `helm install` — as a human-verify step in the
+  chart plan. The `make build-launchpad/load-launchpad/deploy-launchpad` targets stay in Phase 10
+  (DEP-04) per the `<deferred>` section; ROADMAP SC #2 was amended to match. Resolves RESEARCH
+  Open Question 1 and plan-check BLOCKER 2.
+
 ### Locked by ROADMAP success criteria (not re-decided here)
 - `_helpers.tpl` uses `launchpad.*` prefix (SC #1) · `serviceAccountName: launchpad` (SC #4) ·
   namespace-scoped Role granting only `get`/`list`/`watch` on `pods` and `deployments`, NOT a

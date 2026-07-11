@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Product Dashboard
-status: planning
-stopped_at: Phase 8 context gathered
-last_updated: "2026-07-11T01:32:21.723Z"
-last_activity: 2026-07-10
+status: executing
+stopped_at: Phase 8 planned and verified — ready to execute
+last_updated: "2026-07-11T20:28:00.309Z"
+last_activity: 2026-07-11 -- Phase 08 planning complete
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 6
+  total_plans: 8
   completed_plans: 6
   percent: 50
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 
 Phase: 8
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-07-10
+Status: Ready to execute
+Last activity: 2026-07-11 -- Phase 08 planning complete
 
 Progress: [██████████] 100%
 
@@ -91,7 +91,7 @@ None yet — roadmap freshly created.
 
 ### Blockers/Concerns
 
-- Research flag (Phase 8): Confirm `serviceAccountName` + `load_incluster_config()` interaction failure modes: no token = clean `ConfigException` vs wrong ServiceAccount = silent 403. Verify during phase planning.
+- ~~Research flag (Phase 8)~~ RESOLVED in 08-RESEARCH.md: no token = clean `ConfigException` → `(None, None)` muted panel; wrong SA = `ApiException` 403 → distinct access-denied panel. Both branches are explicit must_haves in 08-02.
 - Research flag (Phase 7): Confirm htmx 2.0.x visibility guard syntax `hx-trigger="every 30s [document.visibilityState !== 'hidden']"` — fallback is chained polling if unsupported.
 - Research flag (Phase 9): mongomock cannot verify TTL expiry timing — document in conftest.py; TTL correctness verified live via smoke only.
 
@@ -106,9 +106,9 @@ None yet — roadmap freshly created.
 
 ## Session Continuity
 
-Last session: 2026-07-11T01:32:21.708Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-helm-chart-k8s-diagnostics/08-CONTEXT.md
+Last session: 2026-07-11
+Stopped at: Phase 8 planned and verified (2 plans, re-check passed, all coverage gates green) — ready to execute
+Resume file: .planning/phases/08-helm-chart-k8s-diagnostics/08-01-PLAN.md
 
 ## Operator Next Steps
 
