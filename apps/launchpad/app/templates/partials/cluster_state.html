@@ -1,0 +1,61 @@
+{% if state.available == False %}
+<article class="status-card status-card--unknown">
+  <header>Cluster State</header>
+  <p>Not running in a cluster — Kubernetes view disabled</p>
+</article>
+{% elif state.error == "forbidden" %}
+<article class="status-card status-card--degraded">
+  <header>Cluster State</header>
+  <p>Kubernetes access denied — check RBAC</p>
+</article>
+{% elif state.error == "unreachable" %}
+<article class="status-card status-card--degraded">
+  <header>Cluster State</header>
+  <p>Kubernetes API unreachable</p>
+</article>
+{% else %}
+<h3>Pods</h3>
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Phase</th>
+      <th scope="col">Ready</th>
+      <th scope="col">Restarts</th>
+      <th scope="col">Age</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for pod in state.pods %}
+    <tr>
+      <td>{{ pod.name }}</td>
+      <td>{{ pod.phase }}</td>
+      <td>{{ pod.ready }}</td>
+      <td>{{ pod.restarts }}</td>
+      <td>{{ pod.age }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<h3>Deployments</h3>
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Ready</th>
+      <th scope="col">Up-to-date</th>
+      <th scope="col">Available</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for dep in state.deployments %}
+    <tr>
+      <td>{{ dep.name }}</td>
+      <td>{{ dep.ready }}</td>
+      <td>{{ dep.up_to_date }}</td>
+      <td>{{ dep.available }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

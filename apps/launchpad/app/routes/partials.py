@@ -21,10 +21,17 @@ target in index.html all stay the same."
 Phase 7 (STAT-01/02) replaces the Phase 6 stub data with real
 get_platform_status() internals — the same helper GET /api/status uses, so
 the JSON contract and the dashboard cards can never drift apart.
+
+GET /partials/cluster-state
+  200 — an HTML fragment (partials/cluster_state.html alone) when the
+        HX-Request header is present ("true"), or a full page
+        (cluster_state_full_page.html) otherwise. Same fragment-vs-full-page
+        split as /partials/status-cards, mirrored byte-for-byte (DIAG-02).
 """
 
 from flask import Blueprint, render_template, request
 
+from app.cluster_state import get_cluster_state
 from app.status import get_platform_status
 
 partials_bp = Blueprint("partials", __name__, url_prefix="/partials")
@@ -38,3 +45,13 @@ def status_cards():
     if request.headers.get("HX-Request") == "true":
         return render_template("partials/status_cards.html", status=status)
     return render_template("status_full_page.html", status=status)
+
+
+@partials_bp.route("/cluster-state", methods=["GET"])
+def cluster_state():
+    """Read-only Kubernetes pods/deployments state, fragment for htmx or
+    full page for direct navigation (DIAG-02)."""
+    state = get_cluster_state()
+    if request.headers.get("HX-Request") == "true":
+        return render_template("partials/cluster_state.html", state=state)
+    return render_template("cluster_state_full_page.html", state=state)

@@ -1,6 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Diagnostics{% endblock %}
 {% block content %}
-<h2>Diagnostics</h2>
-<p>Platform diagnostics coming soon.</p>
+<h1>Diagnostics</h1>
+
+<h2>Platform Checks</h2>
+<section id="status-cards"
+         hx-get="{{ url_for('partials.status_cards') }}"
+         hx-trigger="load, every 15s [document.visibilityState === 'visible'], visibilitychange[document.visibilityState === 'visible'] from:document"
+         hx-swap="innerHTML">
+  <article class="status-card status-card--unknown">
+    <p>Loading platform status…</p>
+  </article>
+</section>
+
+<h2>Cluster State</h2>
+<section id="cluster-state"
+         hx-get="{{ url_for('partials.cluster_state') }}"
+         hx-trigger="load, every 10s [document.visibilityState === 'visible'], visibilitychange[document.visibilityState === 'visible'] from:document"
+         hx-swap="innerHTML">
+  <p>Loading cluster state…</p>
+</section>
 {% endblock %}
