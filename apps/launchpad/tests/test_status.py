@@ -14,24 +14,24 @@ import pytest
 from app.status import get_platform_status
 
 
-def test_status_mongo_up_field_guide_reachable(app, mock_requests_get):
+def test_status_mongo_up_field_guide_healthy(app, mock_requests_get):
     """mongo up + requests.get 200 -> mongo_status up, api_health ok,
-    field_guide_reachable True."""
+    field_guide_healthy True."""
     with app.app_context():
         result = get_platform_status()
 
     assert result["mongo_status"] == "up"
     assert result["api_health"] == "ok"
-    assert result["field_guide_reachable"] is True
+    assert result["field_guide_healthy"] is True
 
 
 def test_status_field_guide_unreachable_degrades_gracefully(app, mock_requests_get_unreachable):
-    """mongo up + requests.get raising ConnectionError -> field_guide_reachable
+    """mongo up + requests.get raising ConnectionError -> field_guide_healthy
     False, never raises."""
     with app.app_context():
         result = get_platform_status()
 
-    assert result["field_guide_reachable"] is False
+    assert result["field_guide_healthy"] is False
     assert result["mongo_status"] == "up"
 
 
@@ -67,7 +67,7 @@ def test_status_returns_exactly_six_keys(app, mock_requests_get):
         "mongo_status",
         "app_version",
         "service_count",
-        "field_guide_reachable",
+        "field_guide_healthy",
         "metrics_preview",
     }
 
@@ -136,10 +136,10 @@ def test_api_status_returns_200_with_all_six_fields_when_unreachable(client, moc
         "mongo_status",
         "app_version",
         "service_count",
-        "field_guide_reachable",
+        "field_guide_healthy",
         "metrics_preview",
     }
-    assert body["field_guide_reachable"] is False
+    assert body["field_guide_healthy"] is False
 
 
 def test_status_no_requests_get_call_missing_timeout():

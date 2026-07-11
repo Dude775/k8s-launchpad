@@ -38,6 +38,8 @@ def test_status_cards_degraded_when_field_guide_unreachable(client, mock_request
     body = resp.get_data(as_text=True)
     # The degraded modifier must decorate the Field Guide card specifically.
     assert 'status-card status-card--degraded">\n  <header>Field Guide API</header>' in body
+    # The card renders the "unhealthy" label (field_guide_healthy semantics, WR-03).
+    assert "unhealthy" in body
 
 
 def test_status_cards_shows_mongo_version_and_service_count(client, mock_requests_get):

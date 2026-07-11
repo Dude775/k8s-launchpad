@@ -3,7 +3,7 @@ Platform status JSON endpoint.
 
 GET /api/status
   200 — JSON body with six fields: api_health, mongo_status, app_version,
-        service_count, field_guide_reachable, metrics_preview.
+        service_count, field_guide_healthy, metrics_preview.
 
 JSON-only, always — no HX-Request branching (RESEARCH Open Question 3).
 Shares get_platform_status() with /partials/status-cards (app/status.py) so

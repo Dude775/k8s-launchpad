@@ -2,9 +2,9 @@
   <header>MongoDB</header>
   <p>{{ status.mongo_status }}</p>
 </article>
-<article class="status-card status-card--{{ 'ok' if status.field_guide_reachable else 'degraded' }}">
+<article class="status-card status-card--{{ 'ok' if status.field_guide_healthy else 'degraded' }}">
   <header>Field Guide API</header>
-  <p>{{ 'reachable' if status.field_guide_reachable else 'unreachable' }}</p>
+  <p>{{ 'healthy' if status.field_guide_healthy else 'unhealthy' }}</p>
 </article>
 <article class="status-card status-card--info">
   <header>Version</header>
