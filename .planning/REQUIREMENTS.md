@@ -37,8 +37,8 @@ Requirements for milestone v1.1 (PRD-3 Product Dashboard). Each maps to a roadma
 
 ### Diagnostics
 
-- [ ] **DIAG-01**: Developer sees a diagnostics page with in-app platform checks — MongoDB ping, self-health, and config/version — that runs without a cluster
-- [ ] **DIAG-02**: Diagnostics shows read-only Kubernetes state (pods/deployments in the namespace) via an in-cluster ServiceAccount with least-privilege RBAC, degrading gracefully to an "outside cluster" state when no cluster is reachable
+- [x] **DIAG-01**: Developer sees a diagnostics page with in-app platform checks — MongoDB ping, self-health, and config/version — that runs without a cluster
+- [x] **DIAG-02**: Diagnostics shows read-only Kubernetes state (pods/deployments in the namespace) via an in-cluster ServiceAccount with least-privilege RBAC, degrading gracefully to an "outside cluster" state when no cluster is reachable
 
 ### Activity Feed
 
@@ -118,8 +118,8 @@ Which phases cover which requirements. Phase assignments populated during roadma
 | CAT-03 | Phase 9 | Pending |
 | CAT-04 | Phase 9 | Pending |
 | CAT-05 | Phase 9 | Pending |
-| DIAG-01 | Phase 8 | Pending |
-| DIAG-02 | Phase 8 | Pending |
+| DIAG-01 | Phase 8 | Complete |
+| DIAG-02 | Phase 8 | Complete |
 | FEED-01 | Phase 9 | Pending |
 | FEED-02 | Phase 9 | Pending |
 | FEED-03 | Phase 9 | Pending |

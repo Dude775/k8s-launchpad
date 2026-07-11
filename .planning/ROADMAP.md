@@ -121,6 +121,6 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 5. Monorepo Scaffold + App Factory | v1.1 | 2/2 | Complete   | 2026-07-08 |
 | 6. UI Layer — Templates + Static Assets | v1.1 | 2/2 | Complete   | 2026-07-10 |
 | 7. Status API + Field-Guide Integration | v1.1 | 2/2 | Complete   | 2026-07-10 |
-| 8. Helm Chart + K8s Diagnostics | v1.1 | 0/? | Not started | - |
+| 8. Helm Chart + K8s Diagnostics | v1.1 | 1/2 | In Progress|  |
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 0/? | Not started | - |
 | 10. Makefile Integration + Smoke + Docs | v1.1 | 0/? | Not started | - |
