@@ -1,0 +1,41 @@
+# charts/launchpad/templates/rbac.yaml
+# ServiceAccount + namespace-scoped Role + RoleBinding for the launchpad dashboard's
+# read-only Kubernetes API access (DEP-02, SC #4). The Deployment's
+# spec.template.spec.serviceAccountName: launchpad binds pods to this identity.
+# NEVER a ClusterRole — the diagnostics route only needs read access to pods and
+# deployments in its own namespace (least privilege, T-08-01).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: launchpad
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "launchpad.fullname" . }}-read
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "launchpad.fullname" . }}-read
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "launchpad.fullname" . }}-read
+subjects:
+  - kind: ServiceAccount
+    name: launchpad
+    namespace: {{ .Release.Namespace }}

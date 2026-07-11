@@ -1,0 +1,94 @@
+# charts/launchpad/templates/deployment.yaml
+# Kubernetes Deployment for the launchpad platform dashboard (gunicorn, port 8000).
+# Probe strategy:
+#   readinessProbe: httpGet /health — gates traffic; returns 503 when launchpad's own Mongo is down
+#   livenessProbe:  tcpSocket 8000  — "is gunicorn accepting connections" ONLY
+#   /health is intentionally NOT the liveness target: it would restart healthy pods during Mongo outages
+# readinessProbe stays UNWEAKENED (D-08) — launchpad's own MongoDB arrives in Phase 9 (DEP-03), so the
+# pod is expected to show READY 0/1 (NotReady) until then; SC #2 requires only STATUS Running.
+# securityContext: runAsNonRoot + runAsUser 10001 matches the Dockerfile USER 10001 (numeric UID required for kubelet verification)
+# serviceAccountName: launchpad binds the pod identity to the least-privilege RBAC in rbac.yaml (SC #4)
+# POD_NAMESPACE via Downward API scopes the in-app K8s client to the pod's own namespace (D-05)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "launchpad.fullname" . }}
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "launchpad.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "launchpad.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: dashboard
+      annotations:
+        # checksum/* forces a rolling restart on `helm upgrade` when the ConfigMap/Secret
+        # content changes — env vars are read once at container start, so without this a
+        # config change updates the objects but leaves running pods on stale values.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- if .Values.metrics.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+        {{- end }}
+    spec:
+      serviceAccountName: launchpad
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: launchpad
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "launchpad.fullname" . }}
+                  key: MONGO_URI
+            - name: FIELD_GUIDE_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "launchpad.fullname" . }}
+                  key: FIELD_GUIDE_BASE_URL
+            - name: APP_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "launchpad.fullname" . }}
+                  key: APP_VERSION
+            - name: FLASK_DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "launchpad.fullname" . }}
+                  key: FLASK_DEBUG
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            # > the 2s serverSelectionTimeoutMS in MONGO_URI (secret.yaml), so /health can
+            # return its designed 503 instead of the probe timing out at the 1s default.
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
