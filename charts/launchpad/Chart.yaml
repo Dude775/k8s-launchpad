@@ -1,0 +1,12 @@
+# charts/launchpad/Chart.yaml
+# Helm 3-compatible chart (apiVersion v2) for the launchpad platform dashboard.
+# Installed CLI: Helm 4.2.1 — apiVersion v2 is fully supported unchanged.
+apiVersion: v2
+name: launchpad
+description: >-
+  Deploys the launchpad platform dashboard (Flask + gunicorn), the browser
+  presentation layer for k8s-launchpad. Part of k8s-launchpad v1.1 —
+  the Product Dashboard milestone.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

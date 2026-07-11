@@ -1,0 +1,15 @@
+# charts/launchpad/templates/configmap.yaml
+# Non-secret configuration injected into the app container as environment variables.
+# MONGO_URI (contains connection details) is intentionally absent — it lives in secret.yaml only.
+# MONGO_DBNAME is also absent — launchpad's MONGO_URI carries the db name in its path (app/config.py).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "launchpad.fullname" . }}
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+data:
+  FIELD_GUIDE_BASE_URL: {{ .Values.config.fieldGuideBaseUrl | quote }}
+  APP_VERSION: {{ .Values.config.appVersion | quote }}
+  # empty string disables Flask debug mode; _env_flag in app/config.py treats "" as False
+  FLASK_DEBUG: {{ .Values.config.flaskDebug | quote }}

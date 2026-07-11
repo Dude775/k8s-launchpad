@@ -1,0 +1,28 @@
+# charts/launchpad/.helmignore
+# Patterns to ignore when building chart packages.
+# Syntax: shell glob matching, relative paths, negation with !
+
+# macOS metadata
+.DS_Store
+
+# Common VCS directories
+.git/
+.gitignore
+.bzr/
+.bzrignore
+.hg/
+.hgignore
+.svn/
+
+# Common backup and temporary files
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+
+# IDE and editor directories
+.project
+.idea/
+*.tmproj
+.vscode/

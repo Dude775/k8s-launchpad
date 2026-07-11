@@ -1,0 +1,15 @@
+launchpad deployed successfully.
+
+Usage:
+  Forward the service to your local machine:
+    kubectl port-forward svc/{{ include "launchpad.fullname" . }} 8081:{{ .Values.service.port }}
+
+  Then in another terminal, smoke-test the endpoints:
+    curl http://localhost:8081/health        # expect 200 when launchpad's MongoDB is reachable (503 until Phase 9)
+    curl http://localhost:8081/diagnostics    # expect the diagnostics dashboard page
+    curl http://localhost:8081/api/status     # expect platform status JSON
+
+  Press Ctrl-C in the port-forward terminal to stop.
+
+  To remove all chart resources:
+    helm uninstall {{ .Release.Name }}

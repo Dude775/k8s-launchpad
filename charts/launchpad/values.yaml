@@ -1,0 +1,46 @@
+# charts/launchpad/values.yaml
+# Generic values schema — mirrors the PRD-3 templating seam (HELM-04).
+# LOCAL DEV DEFAULTS ONLY — override sensitive values with --set or -f for anything real.
+# Discipline mirror: apps/launchpad/.env.example
+# Mongo manifests deferred to Phase 9 (DEP-03) — no mongodb subchart block here.
+
+replicaCount: 1
+
+image:
+  repository: localhost:5001/launchpad
+  tag: latest
+  # IfNotPresent is locked by HELM-04 — never change this default.
+  # To pick up a rebuilt image with the same tag, use: kubectl rollout restart deploy/<name>
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+metrics:
+  enabled: true  # PRD-4 scrape seam — enables Prometheus annotations on the pod template
+
+config:
+  # In-cluster DNS name for the field-guide API's ClusterIP Service (port 80).
+  fieldGuideBaseUrl: http://field-guide-api
+  # Surfaced in /api/status; overridden at build/release time when packaging metadata exists.
+  appVersion: dev
+  # empty = disabled; _env_flag in app/config.py treats empty string as False.
+  # MUST stay empty (or unset) in containers and Kubernetes deployments.
+  flaskDebug: ""
+
+# MONGO_URI Secret placeholder — launchpad's OWN MongoDB (db name "launchpad"),
+# never the field-guide API's database. Real in-cluster MongoDB manifests arrive
+# in Phase 9 (DEP-03); until then this is a local-dev placeholder only — never a
+# real credential. serverSelectionTimeoutMS=2000 keeps /health failing fast
+# instead of hanging past the readinessProbe timeoutSeconds.
+mongoUri: "mongodb://localhost:27017/launchpad?serverSelectionTimeoutMS=2000"
