@@ -6,11 +6,11 @@
   <header>Field Guide API</header>
   <p>{{ 'reachable' if status.field_guide_reachable else 'unreachable' }}</p>
 </article>
-<article class="status-card status-card--{{ 'ok' if status.api_health == 'ok' else 'degraded' }}">
+<article class="status-card status-card--info">
   <header>Version</header>
   <p>{{ status.app_version }}</p>
 </article>
-<article class="status-card status-card--{{ 'ok' if status.api_health == 'ok' else 'degraded' }}">
+<article class="status-card status-card--info">
   <header>Registered Services</header>
   <p>{{ status.service_count }}</p>
 </article>
