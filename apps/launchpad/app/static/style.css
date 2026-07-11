@@ -92,6 +92,27 @@ h1, h2, h3 {
   margin-top: 48px;          /* 2xl — hero-to-status-cards break */
 }
 
+/* Status-card health modifiers (WR-01): the color-coded health signal is the
+   entire point of the cards. The templates emit --ok / --degraded / --unknown /
+   --info modifier classes; without these rules a MongoDB outage or unreachable
+   field-guide-api renders identically to a healthy platform. A left border keeps
+   the signal legible in both light and dark schemes (Pico color-500 vars, with
+   literal fallbacks for older Pico builds that do not ship the -500 scale). */
+.status-card--ok {
+  border-left: 4px solid var(--pico-color-green-500, #2e7d32);
+}
+.status-card--degraded {
+  border-left: 4px solid var(--pico-color-red-500, #c62828);
+}
+.status-card--unknown {
+  border-left: 4px solid var(--pico-muted-border-color, #999);
+}
+/* Neutral state for informational cards (WR-02) that do not represent a health
+   signal (Version, Registered Services). */
+.status-card--info {
+  border-left: 4px solid var(--pico-muted-border-color, #999);
+}
+
 /* Collapse to a single column on small viewports. */
 @media (max-width: 768px) {
   .layout {
