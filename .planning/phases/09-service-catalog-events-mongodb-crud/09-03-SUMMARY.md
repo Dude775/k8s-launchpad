@@ -50,14 +50,14 @@ completed: 2026-07-12
 
 # Phase 09 Plan 03: MongoDB Manifests for launchpad Summary
 
-**Mirrored field-guide-api's in-cluster mongo:7 Deployment/PVC/Secret/Service into charts/launchpad/, added the two mongodb _helpers.tpl helpers, wired SECRET_KEY + EVENTS_TTL_SECONDS into the app Deployment, and rewired mongoUri to the new in-cluster launchpad-mongodb Service — resolving the Phase 8 D-08 NotReady consequence pending live verification.**
+**Mirrored field-guide-api's in-cluster mongo:7 Deployment/PVC/Secret/Service into charts/launchpad/, added the two mongodb _helpers.tpl helpers, wired SECRET_KEY + EVENTS_TTL_SECONDS into the app Deployment, and rewired mongoUri to the new in-cluster launchpad-mongodb Service — live deploy verified: launchpad pod READY 1/1, resolving the Phase 8 D-08 NotReady consequence.**
 
 ## Performance
 
-- **Duration:** 12 min
+- **Duration:** 12 min (file changes) + live-deploy verification at the checkpoint
 - **Started:** 2026-07-12T20:04:00Z
-- **Completed:** 2026-07-12T20:16:00Z
-- **Tasks:** 2 of 3 completed (Task 3 is a blocking human-verify checkpoint, live cluster unavailable in this environment)
+- **Completed:** 2026-07-12T20:16:00Z (files); Task 3 checkpoint verified and approved afterwards
+- **Tasks:** 3 of 3 completed (Task 3 human-verify checkpoint approved with live evidence)
 - **Files modified:** 9 (4 created, 5 modified)
 
 ## Accomplishments
@@ -67,6 +67,7 @@ completed: 2026-07-12
 - `values.yaml` gained a `mongodb:` block (mirrors field-guide-api's shape, db `launchpad`), a `secretKey` dev default, `config.eventsTtlSeconds: "604800"`, and `mongoUri` rewired from the `localhost:27017` placeholder to `mongodb://root:launchpad-dev-password@launchpad-mongodb:27017/launchpad?authSource=admin&serverSelectionTimeoutMS=2000`
 - `helm lint charts/launchpad/` passes with no warnings; `helm template launchpad charts/launchpad/` renders two Deployments (app + mongodb), a `mongo:7` image, a 27017 ClusterIP Service named `launchpad-mongodb`, and the app Secret/ConfigMap/Deployment carrying `SECRET_KEY`/`EVENTS_TTL_SECONDS`
 - `charts/field-guide-api/` left completely untouched (`git status --short charts/field-guide-api/` prints nothing)
+- **Live deploy verified (Task 3, D-08 resolution):** fresh kind cluster via `make cluster-up`; image built and pushed to `localhost:5001/launchpad:latest`; `helm upgrade --install launchpad charts/launchpad/` — `launchpad-6584676689-49gfq` READY 1/1 Running and `launchpad-mongodb-746bfccbbd-hcwqg` READY 1/1 Running within ~47s; `/health` via port-forward returned HTTP 200 `{"status": "ok", "mongo": "up"}`; `/api/status` returned `{"api_health": "ok", "mongo_status": "up", "service_count": 0, ...}` with no 500 on a fresh DB
 
 ## Task Commits
 
@@ -74,9 +75,9 @@ Each task was committed atomically:
 
 1. **Task 1: Mirror the four mongodb manifests + add the two _helpers.tpl helpers** - `76e963a` (feat)
 2. **Task 2: Rewire Secret/ConfigMap/Deployment env + values.yaml mongodb block + mongoUri target** - `cdf9daa` (feat)
-3. **Task 3: Live manual deploy — launchpad pod flips to READY 1/1** - NOT YET RUN (blocking human-verify checkpoint; no kind cluster reachable in this execution environment — `kubectl cluster-info` confirmed connection refused)
+3. **Task 3: Live manual deploy — launchpad pod flips to READY 1/1** - no commit (verification-only checkpoint; VERIFIED live: both pods READY 1/1 Running, `/health` 200, `/api/status` clean on a fresh DB)
 
-**Plan metadata:** pending (this SUMMARY commit)
+**Plan metadata:** `c09e3fd` (initial SUMMARY) + follow-up commit recording the Task 3 verification outcome
 
 ## Files Created/Modified
 - `charts/launchpad/templates/mongodb/deployment.yaml` - mongo:7 Deployment, Recreate strategy, mongosh ping readinessProbe, MONGO_INITDB_ROOT_* via secretKeyRef
@@ -95,29 +96,22 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None - plan executed exactly as written for Tasks 1-2. Task 3 (checkpoint) is a live human-verification step that requires a running kind cluster; this execution environment has no cluster reachable (`kubectl cluster-info` returned connection refused), so the checkpoint is correctly deferred to the human rather than attempted or faked.
+None - plan executed exactly as written. Task 3's live-deploy verification was performed at the checkpoint on the user's behalf (build → load → deploy against a fresh kind cluster) and all acceptance criteria passed on the first run.
 
 ## Issues Encountered
 
-None for Tasks 1-2 — `helm lint` and `helm template` verification passed on the first attempt after both edits landed. Task 3 could not be attempted in this sandboxed execution environment (no kind cluster present); this is expected, not a failure — the plan explicitly designates Task 3 as a `checkpoint:human-verify` requiring a human to hand-run the build/load/deploy loop against their own kind cluster.
+None — `helm lint` and `helm template` verification passed on the first attempt after both edits landed, and the live deploy succeeded on the first run (both pods ready within ~47s).
 
 ## User Setup Required
 
-**Live verification required.** The human must hand-run the manual deploy loop described in Task 3 of `09-03-PLAN.md`:
-
-1. `docker build -t localhost:5001/launchpad:latest apps/launchpad`
-2. `kind load docker-image localhost:5001/launchpad:latest` (or push to the local registry)
-3. `helm upgrade --install launchpad charts/launchpad/`
-4. `kubectl get pods` — confirm a `*-mongodb-*` pod reaches `Running` and the `launchpad-*` app pod reaches `READY 1/1`
-5. `kubectl port-forward deploy/launchpad 8081:8000` then `curl -i localhost:8081/health` returns 200
-6. Optionally `curl localhost:8081/api/status` and confirm `service_count` renders without a 500
+None - no external service configuration required. The Task 3 live-deploy verification has been completed and approved.
 
 ## Next Phase Readiness
 
-- Tasks 1-2 (all file changes for DEP-03) are complete, committed, and pass `helm lint`/`helm template` verification
-- Task 3 (live pod-Ready verification) remains open — this plan is NOT fully complete until a human confirms the launchpad pod reaches READY 1/1 against its own in-cluster MongoDB
-- Blocking for: any subsequent phase/plan that assumes the launchpad pod is Ready in a live cluster (e.g. Phase 10 Makefile smoke targets)
+- DEP-03 delivered: launchpad has its own in-cluster mongo:7 database, and the app pod reaches READY 1/1 against it (Phase 8 D-08 consequence closed)
+- The `services`/`events` collections now have a real database to target — 09-01's index creation runs against live Mongo on pod start
+- Ready for Phase 10 (DEP-04/05): Makefile targets and smoke tests can now assume a Ready launchpad pod
 
 ---
 *Phase: 09-service-catalog-events-mongodb-crud*
-*Completed: 2026-07-12 (Tasks 1-2 only; Task 3 checkpoint pending)*
+*Completed: 2026-07-12*
