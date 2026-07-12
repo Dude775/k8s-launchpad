@@ -26,7 +26,8 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
  (completed 2026-07-10)
 - [x] **Phase 7: Status API + Field-Guide Integration** — platform status contract defined; /health safe for Kubernetes readinessProbe (completed 2026-07-10)
 - [x] **Phase 8: Helm Chart + K8s Diagnostics** — launchpad deploys to kind via Helm with RBAC; diagnostics page shows live cluster state (completed 2026-07-11)
-- [x] **Phase 9: Service Catalog + Events / MongoDB CRUD** — developers can register and deregister services; events feed is bounded by TTL (completed 2026-07-12)
+- [x] **Phase 9: Service Catalog + Events / MongoDB CRUD** — developers can register and deregister services; events feed is bounded by TTL
+ (completed 2026-07-12)
 - [ ] **Phase 10: Makefile Integration + Smoke + Docs** — make up-all delivers both apps; dashboard is demoable to a human reviewer
 
 ## Phase Details
@@ -96,10 +97,11 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   4. Deregistering a service (after confirmation) removes it from MongoDB and fires a `service_deregistered` event visible in the activity feed
   5. The `events` collection has a TTL index on `ts`; `make test-launchpad` passes (mongomock-backed); the test suite documents that TTL expiry timing is verified live via smoke, not unit tests
   6. The launchpad Helm chart embeds `mongo:7` manifests in `charts/launchpad/templates/mongodb/` using database name `launchpad`; the field-guide-api chart is left untouched
-**Plans**: 3 plans
+**Plans**: 4 plans (3 original + 1 gap-closure)
   - [x] 09-01-PLAN.md — Flask-WTF + CSRF wiring, catalog.py/events.py never-raise helpers, ServiceForm, config keys, unique+TTL indexes, platform_started guard [CAT-02, CAT-03, FEED-02, FEED-03]
   - [x] 09-02-PLAN.md — catalog CRUD routes + onboard form + detail + zero-JS deregister confirm + /partials/feed 15s polling + shared event-row partial [CAT-01, CAT-02, CAT-03, CAT-04, CAT-05, FEED-01, FEED-02]
   - [x] 09-03-PLAN.md — charts/launchpad mongo:7 manifests mirror + mongodb helpers + SECRET_KEY/EVENTS_TTL_SECONDS rewiring + in-cluster mongoUri (pod flips to Ready) [DEP-03]
+  - [ ] 09-04-PLAN.md — gap closure CR-01: normalize naive datetime in _relative_time + tz_aware=True on mongo.init_app + naive-datetime regression test [FEED-01]
 **UI hint**: yes
 
 ### Phase 10: Makefile Integration + Smoke + Docs
