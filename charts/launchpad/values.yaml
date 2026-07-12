@@ -2,7 +2,7 @@
 # Generic values schema — mirrors the PRD-3 templating seam (HELM-04).
 # LOCAL DEV DEFAULTS ONLY — override sensitive values with --set or -f for anything real.
 # Discipline mirror: apps/launchpad/.env.example
-# Mongo manifests deferred to Phase 9 (DEP-03) — no mongodb subchart block here.
+# Mongo manifests embedded in this chart as of Phase 9 (DEP-03) — see the mongodb: block below.
 
 replicaCount: 1
 
@@ -37,10 +37,36 @@ config:
   # empty = disabled; _env_flag in app/config.py treats empty string as False.
   # MUST stay empty (or unset) in containers and Kubernetes deployments.
   flaskDebug: ""
+  # 7-day TTL for the events collection index (app/events.py); smoke overrides to a
+  # short value to verify expiry.
+  eventsTtlSeconds: "604800"
 
-# MONGO_URI Secret placeholder — launchpad's OWN MongoDB (db name "launchpad"),
-# never the field-guide API's database. Real in-cluster MongoDB manifests arrive
-# in Phase 9 (DEP-03); until then this is a local-dev placeholder only — never a
-# real credential. serverSelectionTimeoutMS=2000 keeps /health failing fast
-# instead of hanging past the readinessProbe timeoutSeconds.
-mongoUri: "mongodb://localhost:27017/launchpad?serverSelectionTimeoutMS=2000"
+# Flask SECRET_KEY — local dev only, never a real credential; override with --set for anything real.
+secretKey: "dev-secret-key-not-for-production"
+
+# MongoDB in-cluster — plain mongo:7 manifests embedded in the chart (NOT Bitnami).
+# Bitnami mongodb chart is behind Broadcom paywall since Sep 2025 — use these plain manifests.
+# Mirrors charts/field-guide-api/values.yaml's mongodb: block shape (Phase 9, DEP-03).
+mongodb:
+  enabled: true
+  image: mongo:7
+  auth:
+    username: root
+    # local kind only; never a real credential — override with --set mongodb.auth.password=<real> for anything real.
+    password: launchpad-dev-password
+    database: launchpad
+  persistence:
+    enabled: true
+    size: 1Gi
+    # empty = cluster default ("standard" on kind, local-path provisioner, WaitForFirstConsumer).
+    # PVC is chart-owned (Deployment-bound, NOT StatefulSet) so helm uninstall removes it cleanly.
+    storageClass: ""
+
+# MONGO_URI Secret — launchpad's OWN in-cluster MongoDB (db name "launchpad"), never the
+# field-guide API's database. Targets the launchpad.mongodb.fullname Service (default release
+# name "launchpad" -> "launchpad-mongodb"); if you install with a non-default release name,
+# override this value with --set mongoUri=... to match the resulting Service hostname.
+# root user + authSource=admin because the mongo:7 entrypoint creates MONGO_INITDB_ROOT_* in
+# the admin database (see templates/mongodb/secret.yaml). serverSelectionTimeoutMS=2000 keeps
+# /health failing fast instead of hanging past the readinessProbe timeoutSeconds.
+mongoUri: "mongodb://root:launchpad-dev-password@launchpad-mongodb:27017/launchpad?authSource=admin&serverSelectionTimeoutMS=2000"

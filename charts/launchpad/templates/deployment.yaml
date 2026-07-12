@@ -4,8 +4,8 @@
 #   readinessProbe: httpGet /health — gates traffic; returns 503 when launchpad's own Mongo is down
 #   livenessProbe:  tcpSocket 8000  — "is gunicorn accepting connections" ONLY
 #   /health is intentionally NOT the liveness target: it would restart healthy pods during Mongo outages
-# readinessProbe stays UNWEAKENED (D-08) — launchpad's own MongoDB arrives in Phase 9 (DEP-03), so the
-# pod is expected to show READY 0/1 (NotReady) until then; SC #2 requires only STATUS Running.
+# readinessProbe stays UNWEAKENED (D-08) — Phase 9 (DEP-03) provides launchpad's own in-cluster
+# MongoDB (charts/launchpad/templates/mongodb/), so the pod reaches READY 1/1 once Mongo is up.
 # securityContext: runAsNonRoot + runAsUser 10001 matches the Dockerfile USER 10001 (numeric UID required for kubelet verification)
 # serviceAccountName: launchpad binds the pod identity to the least-privilege RBAC in rbac.yaml (SC #4)
 # POD_NAMESPACE via Downward API scopes the in-app K8s client to the pod's own namespace (D-05)
@@ -74,6 +74,16 @@ spec:
                 configMapKeyRef:
                   name: {{ include "launchpad.fullname" . }}
                   key: FLASK_DEBUG
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "launchpad.fullname" . }}
+                  key: SECRET_KEY
+            - name: EVENTS_TTL_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "launchpad.fullname" . }}
+                  key: EVENTS_TTL_SECONDS
           readinessProbe:
             httpGet:
               path: /health

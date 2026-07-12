@@ -13,3 +13,5 @@ data:
   APP_VERSION: {{ .Values.config.appVersion | quote }}
   # empty string disables Flask debug mode; _env_flag in app/config.py treats "" as False
   FLASK_DEBUG: {{ .Values.config.flaskDebug | quote }}
+  # TTL seconds for the events collection index — not sensitive, ConfigMap is fine here.
+  EVENTS_TTL_SECONDS: {{ .Values.config.eventsTtlSeconds | quote }}

@@ -1,0 +1,22 @@
+{{- if .Values.mongodb.enabled }}
+# charts/launchpad/templates/mongodb/service.yaml
+# ClusterIP Service for MongoDB — reachable only inside the cluster (no NodePort/hostPort).
+# metadata.name is derived from the SAME launchpad.mongodb.fullname helper used by
+# the app Secret's MONGO_URI hostname — single source of truth.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "launchpad.mongodb.fullname" . }}
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  type: ClusterIP
+  ports:
+    - port: 27017
+      targetPort: 27017
+      protocol: TCP
+      name: mongodb
+  selector:
+    {{- include "launchpad.mongodb.selectorLabels" . | nindent 4 }}
+{{- end }}
