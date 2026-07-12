@@ -1,0 +1,25 @@
+{% if event.type == 'service_registered' %}
+<div class="event-row">
+  <span style="color: var(--pico-primary);">+</span>
+  <span>Service registered</span>
+  {% if event.service_name %}
+  <a href="{{ url_for('pages.catalog_detail', name=event.service_name) }}">{{ event.service_name }}</a>
+  {% endif %}
+  <small style="color: var(--pico-muted-color);">{{ events._relative_time(event.ts) }}</small>
+</div>
+{% elif event.type == 'service_deregistered' %}
+<div class="event-row">
+  <span style="color: var(--pico-del-color);">&minus;</span>
+  <span>Service deregistered</span>
+  {% if event.service_name %}
+  <a href="{{ url_for('pages.catalog_detail', name=event.service_name) }}">{{ event.service_name }}</a>
+  {% endif %}
+  <small style="color: var(--pico-muted-color);">{{ events._relative_time(event.ts) }}</small>
+</div>
+{% else %}
+<div class="event-row">
+  <span style="color: var(--pico-muted-color);">&bull;</span>
+  <span>Platform started</span>
+  <small style="color: var(--pico-muted-color);">{{ events._relative_time(event.ts) }}</small>
+</div>
+{% endif %}

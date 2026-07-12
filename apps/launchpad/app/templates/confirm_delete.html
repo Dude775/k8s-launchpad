@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Deregister {{ service.name }}{% endblock %}
+{% block content %}
+<h1>Deregister {{ service.name }}?</h1>
+<p>This cannot be undone. The service and its registration will be permanently removed from the catalog.</p>
+
+<form method="post" action="{{ url_for('pages.catalog_delete', name=service.name) }}" style="margin-top: 24px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" role="button" style="background: var(--pico-del-color); border-color: var(--pico-del-color);">Deregister</button>
+  <a href="{{ url_for('pages.catalog_detail', name=service.name) }}">Cancel</a>
+</form>
+{% endblock %}

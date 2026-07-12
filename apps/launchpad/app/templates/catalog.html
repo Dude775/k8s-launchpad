@@ -1,6 +1,37 @@
 {% extends "base.html" %}
 {% block title %}Catalog{% endblock %}
 {% block content %}
-<h2>Catalog</h2>
-<p>Service catalog coming soon.</p>
+<header style="display: flex; justify-content: space-between; align-items: center;">
+  <h1>Service Catalog</h1>
+  <a href="{{ url_for('pages.catalog_new') }}" role="button">Register Service</a>
+</header>
+
+{% if services %}
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Environment</th>
+      <th scope="col">Owner</th>
+      <th scope="col">Registered At</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for service in services %}
+    <tr>
+      <td><a href="{{ url_for('pages.catalog_detail', name=service.name) }}">{{ service.name }}</a></td>
+      <td>{{ service.environment }}</td>
+      <td>{{ service.owner }}</td>
+      <td>{{ service.registered_at.strftime('%Y-%m-%d') if service.registered_at else 'unknown' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<article>
+  <header>No services registered yet</header>
+  <p>Register your first service to see it here, along with its deployment environment and owner.</p>
+  <a href="{{ url_for('pages.catalog_new') }}" role="button">Onboard your first service</a>
+</article>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ service.name }}{% endblock %}
+{% block content %}
+<a href="{{ url_for('pages.catalog_list') }}">&larr; Back to Catalog</a>
+
+<section>
+  <h2>Registration</h2>
+  <dl>
+    <dt>Name</dt>
+    <dd>{{ service.name }}</dd>
+    <dt>Repository URL</dt>
+    <dd><a href="{{ service.repo_url }}">{{ service.repo_url }}</a></dd>
+    <dt>Owner</dt>
+    <dd>{{ service.owner }}</dd>
+    <dt>Description</dt>
+    <dd>{{ service.description or '—' }}</dd>
+    <dt>Environment</dt>
+    <dd>{{ service.environment }}</dd>
+    <dt>Registered At</dt>
+    <dd>{{ service.registered_at.strftime('%Y-%m-%d') if service.registered_at else 'unknown' }}</dd>
+  </dl>
+  <a href="{{ url_for('pages.catalog_delete_confirm', name=service.name) }}" style="color: var(--pico-del-color);">Deregister</a>
+</section>
+
+<section>
+  <h2>Related Events</h2>
+  {% set events_list = events_for_service %}
+  {% if events_list %}
+  {% for event in events_list %}
+  {% include "partials/event_row.html" %}
+  {% endfor %}
+  {% else %}
+  <article>
+    <header>No activity yet</header>
+    <p>Platform events will appear here as services are registered and deregistered.</p>
+  </article>
+  {% endif %}
+</section>
+{% endblock %}
