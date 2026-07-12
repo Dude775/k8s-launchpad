@@ -1,0 +1,10 @@
+{% if events_list %}
+{% for event in events_list %}
+{% include "partials/event_row.html" %}
+{% endfor %}
+{% else %}
+<article>
+  <header>No activity yet</header>
+  <p>Platform events will appear here as services are registered and deregistered.</p>
+</article>
+{% endif %}
