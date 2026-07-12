@@ -17,7 +17,7 @@ per-request by a future diagnostics route (D-05).
 from flask import Flask
 
 from app.config import Config
-from app.extensions import metrics, mongo
+from app.extensions import csrf, metrics, mongo
 
 
 def create_app(config_overrides: dict | None = None) -> Flask:
@@ -52,6 +52,11 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     )
     metrics.init_app(app)  # also auto-registers the /metrics endpoint
 
+    #    CSRF protection for all state-changing routes (D-04). Tokens don't
+    #    expire mid-demo session; they stay bound to the signed session cookie.
+    app.config.setdefault("WTF_CSRF_TIME_LIMIT", None)
+    csrf.init_app(app)
+
     # 4. Register blueprints — DEFERRED import so this module is importable
     #    before the route files exist.
     from app.routes.health import health_bp  # noqa: PLC0415
@@ -63,5 +68,19 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     app.register_blueprint(pages_bp)
     app.register_blueprint(partials_bp)
     app.register_blueprint(status_bp)
+
+    # 5. Startup-time index creation + first-readiness event (D-10, D-12).
+    #    Deferred import mirrors the blueprint imports above; app_context is
+    #    needed because events.ensure_indexes() reads current_app.config.
+    #    Every call below is never-raise — an unreachable MongoDB degrades
+    #    silently and emit_platform_started_once() leaves its guard unset so
+    #    a later readiness can still fire the event. Ordering per RESEARCH:
+    #    ensure_indexes before the first write, emit last.
+    from app import catalog, events  # noqa: PLC0415
+
+    with app.app_context():
+        catalog.ensure_indexes()
+        events.ensure_indexes()
+        events.emit_platform_started_once()
 
     return app

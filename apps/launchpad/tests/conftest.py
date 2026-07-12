@@ -21,9 +21,13 @@ def app(monkeypatch):
     """Isolated Flask test app with in-memory MongoDB (no network).
 
     Flask-PyMongo 3.x init_app() sets self.cx and self.db directly on the
-    PyMongo singleton. We replace both with mongomock equivalents after
-    create_app() returns, so all subsequent DB access goes through the
-    in-memory store. monkeypatch restores originals after each test.
+    PyMongo singleton. Since Phase 9, create_app() itself performs Mongo
+    operations at startup (catalog/events.ensure_indexes() +
+    events.emit_platform_started_once()), so mongomock must be in place
+    BEFORE create_app() runs — we monkeypatch PyMongo.init_app to install
+    the mongomock client/db on the singleton, keeping every startup
+    operation in-memory (no socket is ever opened). monkeypatch restores
+    the real init_app after each test.
 
     mongomock TTL limitation (RESEARCH Pitfall 1, D-10): mongomock accepts
     create_index("ts", expireAfterSeconds=...) and stores the option in its
@@ -34,15 +38,27 @@ def app(monkeypatch):
     smoke only (Phase 10). Do not write a test that sleeps then asserts an
     events count change.
 
-    The platform_started once-per-process guard (D-12) is reset BEFORE
-    create_app() so each isolated test app independently exercises the
-    guard's first-call path — mirrors the k8s_disabled module-attribute
-    idiom below.
+    platform_started guard (D-12): create_app() fires the startup event
+    against mongomock (exercising the guard's success path); the fixture
+    then wipes that startup event and re-arms the guard via
+    reset_platform_started_guard_for_tests() so every test starts from an
+    empty events collection and can exercise the first-call path itself —
+    mirrors the k8s_disabled module-attribute idiom below.
     """
     import app.events as events_module
 
+    from flask_pymongo import PyMongo
+
     from app import create_app
-    from app.extensions import mongo
+
+    mock_client = mongomock.MongoClient()
+    mock_db = mock_client["test_db"]
+
+    def _mongomock_init_app(self, flask_app, **kwargs):
+        self.cx = mock_client
+        self.db = mock_db
+
+    monkeypatch.setattr(PyMongo, "init_app", _mongomock_init_app)
 
     events_module.reset_platform_started_guard_for_tests()
 
@@ -50,22 +66,14 @@ def app(monkeypatch):
         {
             "TESTING": True,
             "MONGO_URI": "mongodb://localhost:27017/test_db",
-            # create_app() now performs Mongo operations at startup
-            # (ensure_indexes + emit_platform_started_once) against the real
-            # (unreachable) localhost URI before mongomock is patched in
-            # below. Those never-raise calls degrade silently; this short
-            # server-selection timeout keeps that degradation fast so the
-            # suite doesn't pay PyMongo's 2s default several times per test.
-            "MONGO_SERVER_SELECTION_TIMEOUT_MS": 50,
         }
     )
 
-    mock_client = mongomock.MongoClient()
-    mock_db = mock_client["test_db"]
-
-    # Patch the singleton's instance attributes; monkeypatch auto-restores on teardown.
-    monkeypatch.setattr(mongo, "cx", mock_client)
-    monkeypatch.setattr(mongo, "db", mock_db)
+    # create_app() already created the services/events indexes and wrote the
+    # startup platform_started event into mongomock. Clear the event and
+    # re-arm the guard so each test begins with a clean, deterministic slate.
+    mock_db.events.delete_many({})
+    events_module.reset_platform_started_guard_for_tests()
 
     yield application
 

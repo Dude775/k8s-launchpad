@@ -21,12 +21,18 @@ def test_create_app_is_importable():
 
 
 def test_create_app_returns_flask_app():
-    """create_app() returns a configured Flask app with health_bp registered."""
+    """create_app() returns a configured Flask app with health_bp registered.
+
+    Short server-selection timeout: since Phase 9, create_app() attempts
+    never-raise Mongo operations at startup (ensure_indexes + the
+    platform_started emit); with no live MongoDB they degrade silently, and
+    the short timeout keeps that degradation fast.
+    """
     from flask import Flask
 
     from app import create_app
 
-    app = create_app({"TESTING": True})
+    app = create_app({"TESTING": True, "MONGO_SERVER_SELECTION_TIMEOUT_MS": 10})
 
     assert isinstance(app, Flask)
     assert app.config["TESTING"] is True
@@ -42,12 +48,16 @@ def test_config_has_mongo_uri():
 
 
 def test_create_app_constructs_with_no_live_mongo():
-    """create_app() must not crash at init_app time even with no live MongoDB
-    listening (Pitfall 3) — mongo.init_app() only eagerly parses the URI, it
-    does not connect."""
+    """create_app() must not crash even with no live MongoDB listening.
+
+    mongo.init_app() only eagerly parses the URI (Pitfall 3), and the Phase 9
+    startup calls (catalog/events.ensure_indexes + emit_platform_started_once)
+    are never-raise — an unreachable MongoDB degrades silently. The short
+    server-selection timeout keeps that degradation fast for this test.
+    """
     from app import create_app
 
-    app = create_app({"TESTING": True})
+    app = create_app({"TESTING": True, "MONGO_SERVER_SELECTION_TIMEOUT_MS": 10})
 
     assert app is not None
 
