@@ -24,14 +24,39 @@ def app(monkeypatch):
     PyMongo singleton. We replace both with mongomock equivalents after
     create_app() returns, so all subsequent DB access goes through the
     in-memory store. monkeypatch restores originals after each test.
+
+    mongomock TTL limitation (RESEARCH Pitfall 1, D-10): mongomock accepts
+    create_index("ts", expireAfterSeconds=...) and stores the option in its
+    index metadata, but it has NO background expiry thread — documents never
+    actually expire in tests. Tests therefore assert ONLY that the TTL index
+    EXISTS with the right expireAfterSeconds value (via index_information());
+    never that a document disappears. TTL expiry timing is verified live via
+    smoke only (Phase 10). Do not write a test that sleeps then asserts an
+    events count change.
+
+    The platform_started once-per-process guard (D-12) is reset BEFORE
+    create_app() so each isolated test app independently exercises the
+    guard's first-call path — mirrors the k8s_disabled module-attribute
+    idiom below.
     """
+    import app.events as events_module
+
     from app import create_app
     from app.extensions import mongo
+
+    events_module.reset_platform_started_guard_for_tests()
 
     application = create_app(
         {
             "TESTING": True,
             "MONGO_URI": "mongodb://localhost:27017/test_db",
+            # create_app() now performs Mongo operations at startup
+            # (ensure_indexes + emit_platform_started_once) against the real
+            # (unreachable) localhost URI before mongomock is patched in
+            # below. Those never-raise calls degrade silently; this short
+            # server-selection timeout keeps that degradation fast so the
+            # suite doesn't pay PyMongo's 2s default several times per test.
+            "MONGO_SERVER_SELECTION_TIMEOUT_MS": 50,
         }
     )
 
