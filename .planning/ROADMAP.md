@@ -26,7 +26,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
  (completed 2026-07-10)
 - [x] **Phase 7: Status API + Field-Guide Integration** — platform status contract defined; /health safe for Kubernetes readinessProbe (completed 2026-07-10)
 - [x] **Phase 8: Helm Chart + K8s Diagnostics** — launchpad deploys to kind via Helm with RBAC; diagnostics page shows live cluster state (completed 2026-07-11)
-- [ ] **Phase 9: Service Catalog + Events / MongoDB CRUD** — developers can register and deregister services; events feed is bounded by TTL
+- [x] **Phase 9: Service Catalog + Events / MongoDB CRUD** — developers can register and deregister services; events feed is bounded by TTL (completed 2026-07-12)
 - [ ] **Phase 10: Makefile Integration + Smoke + Docs** — make up-all delivers both apps; dashboard is demoable to a human reviewer
 
 ## Phase Details
@@ -98,7 +98,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   6. The launchpad Helm chart embeds `mongo:7` manifests in `charts/launchpad/templates/mongodb/` using database name `launchpad`; the field-guide-api chart is left untouched
 **Plans**: 3 plans
   - [x] 09-01-PLAN.md — Flask-WTF + CSRF wiring, catalog.py/events.py never-raise helpers, ServiceForm, config keys, unique+TTL indexes, platform_started guard [CAT-02, CAT-03, FEED-02, FEED-03]
-  - [ ] 09-02-PLAN.md — catalog CRUD routes + onboard form + detail + zero-JS deregister confirm + /partials/feed 15s polling + shared event-row partial [CAT-01, CAT-02, CAT-03, CAT-04, CAT-05, FEED-01, FEED-02]
+  - [x] 09-02-PLAN.md — catalog CRUD routes + onboard form + detail + zero-JS deregister confirm + /partials/feed 15s polling + shared event-row partial [CAT-01, CAT-02, CAT-03, CAT-04, CAT-05, FEED-01, FEED-02]
   - [x] 09-03-PLAN.md — charts/launchpad mongo:7 manifests mirror + mongodb helpers + SECRET_KEY/EVENTS_TTL_SECONDS rewiring + in-cluster mongoUri (pod flips to Ready) [DEP-03]
 **UI hint**: yes
 
@@ -125,5 +125,5 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 6. UI Layer — Templates + Static Assets | v1.1 | 2/2 | Complete   | 2026-07-10 |
 | 7. Status API + Field-Guide Integration | v1.1 | 2/2 | Complete   | 2026-07-10 |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 2/2 | Complete   | 2026-07-11 |
-| 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 2/3 | In Progress|  |
+| 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 3/3 | Complete   | 2026-07-12 |
 | 10. Makefile Integration + Smoke + Docs | v1.1 | 0/? | Not started | - |
