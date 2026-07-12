@@ -27,10 +27,17 @@ GET /partials/cluster-state
         HX-Request header is present ("true"), or a full page
         (cluster_state_full_page.html) otherwise. Same fragment-vs-full-page
         split as /partials/status-cards, mirrored byte-for-byte (DIAG-02).
+
+GET /partials/feed
+  200 — an HTML fragment (partials/feed_events.html alone) when the
+        HX-Request header is present ("true"), or a full page
+        (feed_full_page.html) otherwise. Same fragment-vs-full-page split as
+        the two routes above (FEED-01).
 """
 
 from flask import Blueprint, render_template, request
 
+from app import events
 from app.cluster_state import get_cluster_state
 from app.status import get_platform_status
 
@@ -55,3 +62,13 @@ def cluster_state():
     if request.headers.get("HX-Request") == "true":
         return render_template("partials/cluster_state.html", state=state)
     return render_template("cluster_state_full_page.html", state=state)
+
+
+@partials_bp.route("/feed", methods=["GET"])
+def feed():
+    """Recent platform events, fragment for htmx or full page for direct
+    navigation (FEED-01)."""
+    recent = events.list_recent_events()
+    if request.headers.get("HX-Request") == "true":
+        return render_template("partials/feed_events.html", events_list=recent, events=events)
+    return render_template("feed_full_page.html", events_list=recent, events=events)

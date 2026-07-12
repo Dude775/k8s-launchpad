@@ -66,6 +66,13 @@ def app(monkeypatch):
         {
             "TESTING": True,
             "MONGO_URI": "mongodb://localhost:27017/test_db",
+            # Two-tier CSRF test posture (RESEARCH Pitfall 3): the default
+            # app/client fixtures disable CSRF for convenience across the
+            # majority of route/form tests. Exactly ONE dedicated test
+            # (test_onboard_form_rejects_missing_csrf_token) overrides this
+            # back to True to prove the CSRFProtect wiring is live end-to-end
+            # — never blanket-hidden by this default.
+            "WTF_CSRF_ENABLED": False,
         }
     )
 

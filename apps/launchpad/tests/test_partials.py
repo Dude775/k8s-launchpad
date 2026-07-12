@@ -9,6 +9,11 @@ field-guide-api is unreachable — never a 500, never an empty body.
 Also covers GET /partials/cluster-state (DIAG-02): the same fragment-vs-
 full-page split, using k8s_disabled so no real cluster is needed — the
 outside-cluster muted panel is the default local/CI state.
+
+Also covers GET /partials/feed (FEED-01): the same fragment-vs-full-page
+split, rendering the shared partials/event_row.html per Event-Row Anatomy —
+glyph, human label, service-name link, relative time — reused unchanged by
+the detail page (D-09).
 """
 
 
@@ -73,3 +78,94 @@ def test_cluster_state_full_page_when_no_hx_request(client, k8s_disabled):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "<html" in body
+
+
+# --------------------------------------------------------------------------- #
+# Activity feed fragment / full page (FEED-01)                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_feed_fragment_when_hx_request_present(client):
+    """GET /partials/feed with HX-Request: true returns a fragment (no
+    <html> / no <!doctype>)."""
+    resp = client.get("/partials/feed", headers={"HX-Request": "true"})
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "<html" not in body
+    assert "<!doctype" not in body.lower()
+
+
+def test_feed_full_page_when_no_hx_request(client):
+    """GET /partials/feed with NO HX-Request header returns a full page
+    (contains <html> and the base.html shell)."""
+    resp = client.get("/partials/feed")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "<html" in body
+
+
+def test_feed_empty_state(client):
+    """An empty feed renders the "No activity yet" empty-state copy."""
+    resp = client.get("/partials/feed", headers={"HX-Request": "true"})
+    body = resp.get_data(as_text=True)
+    assert "No activity yet" in body
+
+
+def test_feed_seeded_event_renders_glyph_label_and_link(client, monkeypatch):
+    """A seeded service_registered event renders the '+' glyph, the "Service
+    registered" label, and a link to /catalog/<name> (Event-Row Anatomy)."""
+    import datetime
+
+    import app.events as events_module
+
+    fake_event = {
+        "type": "service_registered",
+        "service_name": "seeded-svc",
+        "ts": datetime.datetime.now(datetime.timezone.utc),
+    }
+    monkeypatch.setattr(events_module, "list_recent_events", lambda limit=50: [fake_event])
+
+    resp = client.get("/partials/feed", headers={"HX-Request": "true"})
+    body = resp.get_data(as_text=True)
+    assert ">+<" in body
+    assert "Service registered" in body
+    assert 'href="/catalog/seeded-svc"' in body
+
+
+def test_feed_platform_started_event_has_no_service_link(client, monkeypatch):
+    """A platform_started event renders the muted bullet glyph and label, with
+    no service-name link (no service attached)."""
+    import datetime
+
+    import app.events as events_module
+
+    fake_event = {
+        "type": "platform_started",
+        "service_name": None,
+        "ts": datetime.datetime.now(datetime.timezone.utc),
+    }
+    monkeypatch.setattr(events_module, "list_recent_events", lambda limit=50: [fake_event])
+
+    resp = client.get("/partials/feed", headers={"HX-Request": "true"})
+    body = resp.get_data(as_text=True)
+    assert "Platform started" in body
+
+
+def test_feed_deregistered_event_renders_destructive_glyph(client, monkeypatch):
+    """A seeded service_deregistered event renders the destructive glyph and
+    the "Service deregistered" label."""
+    import datetime
+
+    import app.events as events_module
+
+    fake_event = {
+        "type": "service_deregistered",
+        "service_name": "gone-svc",
+        "ts": datetime.datetime.now(datetime.timezone.utc),
+    }
+    monkeypatch.setattr(events_module, "list_recent_events", lambda limit=50: [fake_event])
+
+    resp = client.get("/partials/feed", headers={"HX-Request": "true"})
+    body = resp.get_data(as_text=True)
+    assert "Service deregistered" in body
+    assert 'href="/catalog/gone-svc"' in body

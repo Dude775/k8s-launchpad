@@ -15,8 +15,8 @@
         <li><a href="{{ url_for('pages.index') }}"
                {% if request.endpoint == 'pages.index' %}aria-current="page"{% endif %}>
                Dashboard</a></li>
-        <li><a href="{{ url_for('pages.catalog') }}"
-               {% if request.endpoint == 'pages.catalog' %}aria-current="page"{% endif %}>
+        <li><a href="{{ url_for('pages.catalog_list') }}"
+               {% if request.endpoint and request.endpoint.startswith('pages.catalog') %}aria-current="page"{% endif %}>
                Catalog</a></li>
         <li><a href="{{ url_for('pages.diagnostics') }}"
                {% if request.endpoint == 'pages.diagnostics' %}aria-current="page"{% endif %}>
