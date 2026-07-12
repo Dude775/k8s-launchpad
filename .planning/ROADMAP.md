@@ -22,12 +22,10 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 ### v1.1 Product Dashboard (Phases 5-10)
 
 - [x] **Phase 5: Monorepo Scaffold + App Factory** — launchpad Flask app structure and test harness pass without a cluster (completed 2026-07-08)
-- [x] **Phase 6: UI Layer — Templates + Static Assets** — browser dashboard shell renders with vendored assets and sidebar navigation
- (completed 2026-07-10)
+- [x] **Phase 6: UI Layer — Templates + Static Assets** — browser dashboard shell renders with vendored assets and sidebar navigation (completed 2026-07-10)
 - [x] **Phase 7: Status API + Field-Guide Integration** — platform status contract defined; /health safe for Kubernetes readinessProbe (completed 2026-07-10)
 - [x] **Phase 8: Helm Chart + K8s Diagnostics** — launchpad deploys to kind via Helm with RBAC; diagnostics page shows live cluster state (completed 2026-07-11)
-- [x] **Phase 9: Service Catalog + Events / MongoDB CRUD** — developers can register and deregister services; events feed is bounded by TTL
- (completed 2026-07-12)
+- [x] **Phase 9: Service Catalog + Events / MongoDB CRUD** — developers can register and deregister services; events feed is bounded by TTL (completed 2026-07-12)
 - [ ] **Phase 10: Makefile Integration + Smoke + Docs** — make up-all delivers both apps; dashboard is demoable to a human reviewer
 
 ## Phase Details
