@@ -1,0 +1,68 @@
+{{- if .Values.mongodb.enabled }}
+# charts/launchpad/templates/mongodb/deployment.yaml
+# Plain Deployment for MongoDB — NOT a StatefulSet.
+# StatefulSet volumeClaimTemplates are NOT deleted by helm uninstall; a plain Deployment +
+# chart-owned PVC (pvc.yaml) is deleted cleanly (mirrors field-guide-api RESEARCH.md Alternatives Considered).
+# mongo:7 is a Docker official library image (Package Legitimacy Audit: Approved).
+# Readiness probe: mongosh ping requires NO auth even with --auth enabled (live-verified).
+# MONGO_INITDB_ROOT_* bootstraps the root user in admin on first PVC init only (Pitfall 4).
+# Source: mirrors charts/field-guide-api/templates/mongodb/deployment.yaml (Phase 9, DEP-03)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "launchpad.mongodb.fullname" . }}
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  replicas: 1
+  # Recreate (NOT the RollingUpdate default): a single mongod bound to a RWO PVC must be
+  # stopped before its replacement starts. RollingUpdate surges a second mongod against the
+  # same /data/db (RWO is node-scoped on single-node kind) — it crash-loops on mongod.lock
+  # and `helm upgrade --wait` deadlocks; two mongods on one data dir is a corruption hazard.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "launchpad.mongodb.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "launchpad.mongodb.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: {{ .Values.mongodb.image | quote }}
+          ports:
+            - name: mongodb
+              containerPort: 27017
+              protocol: TCP
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "launchpad.mongodb.fullname" . }}
+                  key: MONGO_INITDB_ROOT_USERNAME
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "launchpad.mongodb.fullname" . }}
+                  key: MONGO_INITDB_ROOT_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "launchpad.mongodb.fullname" . }}
+{{- end }}

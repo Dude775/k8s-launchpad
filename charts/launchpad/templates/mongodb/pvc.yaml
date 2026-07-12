@@ -1,0 +1,25 @@
+{{- if .Values.mongodb.enabled }}
+# charts/launchpad/templates/mongodb/pvc.yaml
+# PersistentVolumeClaim for MongoDB data storage.
+# Chart-owned (NOT a StatefulSet volumeClaimTemplate) so helm uninstall removes it cleanly.
+# storageClass "" -> cluster default; on kind the default "standard" StorageClass uses
+# the local-path provisioner with WaitForFirstConsumer binding mode.
+# PVC stays Pending until the mongodb pod schedules — this is normal, not an error.
+# Source: mirrors charts/field-guide-api/templates/mongodb/pvc.yaml (Phase 9, DEP-03)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "launchpad.mongodb.fullname" . }}
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.mongodb.persistence.size | quote }}
+  {{- if .Values.mongodb.persistence.storageClass }}
+  storageClassName: {{ .Values.mongodb.persistence.storageClass | quote }}
+  {{- end }}
+{{- end }}
