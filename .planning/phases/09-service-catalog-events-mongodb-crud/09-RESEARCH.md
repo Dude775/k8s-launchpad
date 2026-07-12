@@ -624,7 +624,7 @@ apply unchanged here.
 
 ## Open Questions
 
-1. **Exact WTForms `URLField` vs `StringField` + `URL()` validator choice**
+1. **(RESOLVED — via Recommendation below; plans follow it)** Exact WTForms `URLField` vs `StringField` + `URL()` validator choice
    - What we know: WTForms ships both a generic `StringField` (paired with a `URL()` validator) and
      a dedicated `URLField` (which renders `<input type="url">`, matching the UI-SPEC's Form
      Contract table exactly: `repo_url` → `<input type="url">`).
