@@ -97,9 +97,9 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   5. The `events` collection has a TTL index on `ts`; `make test-launchpad` passes (mongomock-backed); the test suite documents that TTL expiry timing is verified live via smoke, not unit tests
   6. The launchpad Helm chart embeds `mongo:7` manifests in `charts/launchpad/templates/mongodb/` using database name `launchpad`; the field-guide-api chart is left untouched
 **Plans**: 3 plans
-  - [ ] 09-01-PLAN.md — Flask-WTF + CSRF wiring, catalog.py/events.py never-raise helpers, ServiceForm, config keys, unique+TTL indexes, platform_started guard [CAT-02, CAT-03, FEED-02, FEED-03]
+  - [x] 09-01-PLAN.md — Flask-WTF + CSRF wiring, catalog.py/events.py never-raise helpers, ServiceForm, config keys, unique+TTL indexes, platform_started guard [CAT-02, CAT-03, FEED-02, FEED-03]
   - [ ] 09-02-PLAN.md — catalog CRUD routes + onboard form + detail + zero-JS deregister confirm + /partials/feed 15s polling + shared event-row partial [CAT-01, CAT-02, CAT-03, CAT-04, CAT-05, FEED-01, FEED-02]
-  - [ ] 09-03-PLAN.md — charts/launchpad mongo:7 manifests mirror + mongodb helpers + SECRET_KEY/EVENTS_TTL_SECONDS rewiring + in-cluster mongoUri (pod flips to Ready) [DEP-03]
+  - [x] 09-03-PLAN.md — charts/launchpad mongo:7 manifests mirror + mongodb helpers + SECRET_KEY/EVENTS_TTL_SECONDS rewiring + in-cluster mongoUri (pod flips to Ready) [DEP-03]
 **UI hint**: yes
 
 ### Phase 10: Makefile Integration + Smoke + Docs
@@ -125,5 +125,5 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 6. UI Layer — Templates + Static Assets | v1.1 | 2/2 | Complete   | 2026-07-10 |
 | 7. Status API + Field-Guide Integration | v1.1 | 2/2 | Complete   | 2026-07-10 |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 2/2 | Complete   | 2026-07-11 |
-| 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 0/3 | Planned | - |
+| 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 2/3 | In Progress|  |
 | 10. Makefile Integration + Smoke + Docs | v1.1 | 0/? | Not started | - |
