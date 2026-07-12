@@ -43,6 +43,17 @@ class Config:
     # in this monorepo yet, so this is env-var-sourced with a "dev" fallback.
     APP_VERSION: str = os.environ.get("APP_VERSION", "dev")
 
+    # Signs the Flask session cookie and the Flask-WTF CSRF token (D-04/D-05).
+    # In-cluster the real value arrives via the chart Secret (secretKeyRef);
+    # the default below is deliberately labeled as non-production so a missing
+    # env var can never silently masquerade as a real credential.
+    SECRET_KEY: str = os.environ.get("SECRET_KEY", "dev-secret-key-not-for-production")
+
+    # TTL for documents in the events collection, applied as the TTL index's
+    # expireAfterSeconds on events.ts (D-10, FEED-03). Default 604800 = 7 days;
+    # env-overridable so smoke tests can verify expiry with a short window.
+    EVENTS_TTL_SECONDS: int = int(os.environ.get("EVENTS_TTL_SECONDS", "604800"))
+
     # Debug mode is opt-in via FLASK_DEBUG=1/true/yes/on; default is False.
     # FLASK_DEBUG=0 / FLASK_DEBUG=false explicitly disable it (secure in containers).
     DEBUG: bool = _env_flag("FLASK_DEBUG")

@@ -7,11 +7,17 @@ and makes testing with isolated app instances straightforward.
 """
 
 from flask_pymongo import PyMongo
+from flask_wtf import CSRFProtect
 from prometheus_flask_exporter import PrometheusMetrics
 
 # Unbound PyMongo singleton — bound to app in create_app() via mongo.init_app(app).
 # Own MongoDB only (launchpad's DB) — never used to reach field-guide-api's DB.
 mongo: PyMongo = PyMongo()
+
+# Unbound CSRFProtect singleton — bound in create_app() via csrf.init_app(app).
+# Protects all state-changing (POST) routes app-wide (D-04: Flask-WTF, no
+# hand-rolled CSRF). Token signing uses the app's SECRET_KEY (D-05).
+csrf: CSRFProtect = CSRFProtect()
 
 # Unbound PrometheusMetrics singleton — bound in create_app() via metrics.init_app(app).
 # Using .for_app_factory() defers /metrics route registration to init_app time,
