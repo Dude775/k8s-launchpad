@@ -198,3 +198,143 @@ def test_ensure_indexes_creates_unique_name_index_idempotently(app):
 def test_ensure_indexes_never_raises_on_db_failure(app, broken_mongo):
     with app.app_context():
         catalog.ensure_indexes()  # must not raise
+
+
+# --- ServiceForm validation schema (CAT-02, CAT-03, D-01, D-02) ----------------
+#
+# Error strings asserted below are character-for-character the UI-SPEC
+# Copywriting Contract locked copy — they are contracts, not placeholders.
+
+REQUIRED_ERROR = "This field is required."
+NAME_FORMAT_ERROR = "Use lowercase letters, numbers, and hyphens only (2–40 characters)."
+URL_ERROR = "Enter a valid http:// or https:// URL."
+OWNER_ERROR = "Owner is required."
+
+VALID_FORM_DATA = {
+    "name": "my-service-1",
+    "repo_url": "https://github.com/org/repo",
+    "owner": "team-platform",
+    "description": "",
+    "environment": "dev",
+}
+
+
+def _validate_form(app, data):
+    """Build a ServiceForm from raw formdata inside an app context with CSRF
+    disabled (the two-tier CSRF posture: field validation is tested here;
+    the CSRF-enabled round-trip is a dedicated route test in Plan 09-02)."""
+    from werkzeug.datastructures import MultiDict
+
+    from app.forms import ServiceForm
+
+    app.config["WTF_CSRF_ENABLED"] = False
+    with app.app_context():
+        form = ServiceForm(formdata=MultiDict(data))
+        valid = form.validate()
+    return form, valid
+
+
+def test_form_valid_submission_passes(app):
+    form, valid = _validate_form(app, VALID_FORM_DATA)
+
+    assert valid is True
+    assert form.errors == {}
+
+
+def test_form_description_is_optional(app):
+    data = dict(VALID_FORM_DATA)
+    del data["description"]
+    form, valid = _validate_form(app, data)
+
+    assert valid is True
+
+
+@pytest.mark.parametrize("bad_name", ["MyService", "a", "x" * 41, "has space"])
+def test_form_name_format_rejected_with_locked_copy(app, bad_name):
+    form, valid = _validate_form(app, {**VALID_FORM_DATA, "name": bad_name})
+
+    assert valid is False
+    assert NAME_FORMAT_ERROR in form.name.errors
+
+
+def test_form_empty_name_yields_required_error(app):
+    form, valid = _validate_form(app, {**VALID_FORM_DATA, "name": ""})
+
+    assert valid is False
+    assert REQUIRED_ERROR in form.name.errors
+
+
+@pytest.mark.parametrize(
+    "good_url", ["https://github.com/org/repo", "http://example.com"]
+)
+def test_form_repo_url_accepts_http_and_https(app, good_url):
+    form, valid = _validate_form(app, {**VALID_FORM_DATA, "repo_url": good_url})
+
+    assert valid is True
+
+
+@pytest.mark.parametrize("bad_url", ["ftp://x", "javascript:alert(1)", "not-a-url"])
+def test_form_repo_url_rejects_non_http_schemes_with_locked_copy(app, bad_url):
+    form, valid = _validate_form(app, {**VALID_FORM_DATA, "repo_url": bad_url})
+
+    assert valid is False
+    assert URL_ERROR in form.repo_url.errors
+
+
+def test_form_empty_owner_yields_owner_required_error(app):
+    form, valid = _validate_form(app, {**VALID_FORM_DATA, "owner": ""})
+
+    assert valid is False
+    assert OWNER_ERROR in form.owner.errors
+
+
+def test_form_owner_over_max_length_fails(app):
+    form, valid = _validate_form(app, {**VALID_FORM_DATA, "owner": "x" * 101})
+
+    assert valid is False
+    assert form.owner.errors
+
+
+@pytest.mark.parametrize("env", ["dev", "staging", "prod"])
+def test_form_environment_accepts_allowed_values(app, env):
+    form, valid = _validate_form(app, {**VALID_FORM_DATA, "environment": env})
+
+    assert valid is True
+
+
+def test_form_environment_rejects_unknown_value(app):
+    form, valid = _validate_form(app, {**VALID_FORM_DATA, "environment": "qa"})
+
+    assert valid is False
+    assert form.environment.errors
+
+
+def test_form_environment_defaults_to_dev(app):
+    from app.forms import ServiceForm
+
+    app.config["WTF_CSRF_ENABLED"] = False
+    with app.app_context():
+        form = ServiceForm()
+
+    assert form.environment.data == "dev"
+
+
+def test_form_fully_invalid_submission_surfaces_all_errors_at_once(app):
+    """All field errors show simultaneously on re-render (D-06) — not
+    one-at-a-time."""
+    form, valid = _validate_form(
+        app,
+        {
+            "name": "Bad Name!",
+            "repo_url": "ftp://nope",
+            "owner": "",
+            "description": "",
+            "environment": "qa",
+        },
+    )
+
+    assert valid is False
+    assert NAME_FORMAT_ERROR in form.name.errors
+    assert URL_ERROR in form.repo_url.errors
+    assert OWNER_ERROR in form.owner.errors
+    assert form.environment.errors
