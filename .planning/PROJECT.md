@@ -114,7 +114,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 **v1.0 Foundation shipped 2026-07-07.** The full local build-to-deploy loop works end to end: `make up` (cluster-up → build → load → deploy) produces a running Flask field-guide API on kind, backed by in-cluster MongoDB, confirmed by `make smoke` (200 on /health, /entries, /metrics) and human sign-off. Codebase: ~1,360 LOC of app/chart/script source, 32 tests at 100% coverage, 114 commits over 4 days. All PRD-2/3/4 seams in place: `/metrics` endpoint, generic values.yaml, `infra/argocd/` and `infra/observability/` directories.
 
-**v1.1 progress:** Phases 5–7 complete. Phase 7 (Status API + Field-Guide Integration) defined the platform status contract — launchpad's own `mongo` singleton is wired, `/health` is a real Kubernetes-readinessProbe-safe Mongo ping (200/503, never touches field-guide-api), and `/api/status` surfaces `api_health`, `mongo_status`, `app_version`, `service_count`, and `field_guide_reachable` (degrades gracefully, never 500s, when field-guide-api is unreachable). STAT-01..04 validated; launchpad suite at 37 tests / 100% coverage.
+**v1.1 progress:** Phases 5–9 complete. Phase 8 delivered the launchpad Helm chart with least-privilege RBAC and the K8s diagnostics panel. Phase 9 (Service Catalog + Events / MongoDB CRUD) delivered the full catalog UX — register/view/deregister services via CSRF-protected forms, service detail pages, and a TTL-bounded events feed polling via htmx — backed by launchpad's own in-cluster MongoDB (DEP-03 manifests mirrored from field-guide-api). CAT-01..05, FEED-01..03, DEP-03 validated (verification passed 7/7 after CR-01 gap closure: naive-datetime normalization + tz_aware=True so relative times render real values against real MongoDB). Launchpad suite at 128 tests / 100% coverage.
 
 Known tech debt: README /health example shows compact JSON while Flask emits spaced JSON (cosmetic); MongoDB runs with a committed local-dev password (acceptable for local kind only, warned in NOTES.txt); status-card `--ok/--degraded/--unknown` CSS modifiers have no rules in style.css yet (WR-01, Phase 7 review) — degraded state does not visually render, to be addressed in a UI pass.
 
@@ -123,4 +123,4 @@ Known tech debt: README /health example shows compact JSON while Flask emits spa
 After v1.1 (PRD-3 Product Dashboard): PRD-2 GitOps — ArgoCD syncs deployments from Git (GITOPS-01). Later: PRD-4 observability/security, final PRD AWS/EKS.
 
 ---
-*Last updated: 2026-07-10 — Phase 7 (Status API + Field-Guide Integration) complete*
+*Last updated: 2026-07-13 — Phase 9 (Service Catalog + Events / MongoDB CRUD) complete*
