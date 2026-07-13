@@ -79,7 +79,15 @@ requires.
 - **D-12:** docs/ pages get targeted launchpad updates where they genuinely apply:
   `docs/troubleshooting.md` (port 8081 conflicts, launchpad pod NotReady → Mongo, stale
   port-forwards), `docs/known-limitations.md` (committed local-dev Mongo password, WR-01
-  degraded-CSS gap, TTL timing verified live only). No rewrite of `docs/windows-setup.md`.
+  committed local-dev `mongoUri` hostname/credentials as chart defaults, TTL timing verified
+  live only). No rewrite of `docs/windows-setup.md`.
+  *(Amended 2026-07-13 during plan verification: the original D-12 listed a "WR-01 degraded-CSS
+  gap" inherited from a stale PROJECT.md tech-debt note, but that CSS gap was already FIXED in
+  Phase 7 — commit `c977206` added the `.status-card--ok/--degraded/--unknown` rules to
+  `apps/launchpad/app/static/style.css:101-109`. Retargeted to the genuinely open WR-01 from the
+  Phase 9 review/verification: `charts/launchpad/values.yaml:72` embeds a local-dev hostname and
+  credentials in the `mongoUri` default — documented as an accepted local-dev limitation, not
+  production secrets.)*
 - **D-13:** Fix the known cosmetic debt while re-capturing README output: the `/health`
   example must show Flask's real spaced JSON, not compact JSON. All captured outputs in
   the new README are real, not typed. (Closes the PROJECT.md tech-debt note.)
