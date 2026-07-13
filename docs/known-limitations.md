@@ -28,7 +28,7 @@ The MongoDB PVC uses kind's default hostPath StorageClass. Running `make cluster
 `make reset-local` destroys the kind cluster and with it all MongoDB data. This is expected
 for a local dev cluster; persistence hardening is out of scope for PRD-1.
 
-### Committed Dev Password (`fieldguide-dev-password`)
+### Committed Dev Password (`fieldguide-dev-password`, `launchpad-dev-password`)
 The Helm chart ships with a committed local-dev MongoDB password. `helm install` prints a
 warning at deploy time:
 
@@ -37,11 +37,34 @@ warning at deploy time:
 !! This is acceptable ONLY on a local kind cluster.
 ```
 
-This is intentional for frictionless local setup. Override it for anything beyond localhost:
+This is intentional for frictionless local setup. The `charts/launchpad` chart carries the same
+committed-password discipline (`charts/launchpad/values.yaml:56`, `launchpad-dev-password`).
+Override it for anything beyond localhost:
 
 ```bash
 helm upgrade field-guide-api charts/field-guide-api --set mongodb.auth.password=<real-password>
+helm upgrade launchpad charts/launchpad --set mongodb.auth.password=<real-password>
 ```
+
+### WR-01 — Committed Local-Dev `mongoUri` Defaults (launchpad)
+The launchpad chart's `mongoUri` (`charts/launchpad/values.yaml:72`) embeds a local-dev
+hostname **and** the committed credential above as a single committed default:
+
+```
+mongodb://root:launchpad-dev-password@launchpad-mongodb:27017/launchpad?authSource=admin&serverSelectionTimeoutMS=2000
+```
+
+This is an accepted local-dev limitation, not a production secret — the hostname
+(`launchpad-mongodb`) only resolves inside the cluster's own namespace, and the password is the
+same committed local-dev value documented above. Keep `mongoUri` and
+`mongodb.auth.password` in sync when overriding for any non-local use:
+
+```bash
+helm upgrade launchpad charts/launchpad --set mongoUri=<real-uri>
+```
+
+(Flagged in Phase 9 review/verification as WR-01; genuinely open — tracked here rather than
+fixed in-chart because PRD-1/v1.1 scope is local-only.)
 
 ### Cosmetic gunicorn `/home/app` Warning in Startup Logs
 gunicorn logs a permission warning at startup because the non-root user (`UID 10001`) has no
@@ -57,6 +80,20 @@ environment in later PRDs.
 ### No AWS / EKS / Terraform
 This milestone is entirely local and free. Cloud deployment (AWS/EKS/Terraform) is deferred
 to the final PRD.
+
+### Events TTL Expiry Verified Live Only (not unit tests)
+The launchpad activity feed's events collection is TTL-bounded (`EVENTS_TTL_SECONDS`), but
+actual expiry behavior is MongoDB server-side background work — not something a unit test can
+exercise meaningfully. Verification is live-only, via `make verify-ttl`:
+
+```
+==> Verifying events TTL index...
+  PASS  events.ts TTL index present
+```
+
+The default mode asserts the `expireAfterSeconds` index exists (deterministic, fast). Run with
+`TTL_DEEP=1` for a real insert-and-wait round-trip that confirms MongoDB's TTL monitor actually
+removes an expired document (slow, ~60-90s). This closes the Phase 9 FEED-03 "verify live" flag.
 
 ## See Also
 
