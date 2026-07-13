@@ -128,4 +128,4 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 7. Status API + Field-Guide Integration | v1.1 | 2/2 | Complete   | 2026-07-10 |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 2/2 | Complete   | 2026-07-11 |
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 4/4 | Complete   | 2026-07-13 |
-| 10. Makefile Integration + Smoke + Docs | v1.1 | 2/2 | Complete   | 2026-07-13 |
+| 10. Makefile Integration + Smoke + Docs | v1.1 | 2/2 | Complete    | 2026-07-13 |

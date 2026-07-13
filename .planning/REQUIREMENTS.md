@@ -51,12 +51,12 @@ Requirements for milestone v1.1 (PRD-3 Product Dashboard). Each maps to a roadma
 - [x] **DEP-01**: `charts/launchpad/` Helm chart deploys the dashboard (Deployment, Service, ConfigMap, Secret, values.yaml); `helm lint` passes and its `_helpers.tpl` naming does not collide with field-guide-api selectors
 - [x] **DEP-02**: The chart provisions a ServiceAccount + namespace-scoped Role + RoleBinding granting read-only access to pods/deployments, with `serviceAccountName` wired into the Deployment spec
 - [ ] **DEP-03**: Launchpad runs its own in-cluster MongoDB (own database) via `mongo:7` manifests embedded in its chart; the field-guide-api chart is left untouched
-- [ ] **DEP-04**: The Makefile has namespaced launchpad targets (`build-launchpad`, `load-launchpad`, `deploy-launchpad`, `port-forward-launchpad`, `smoke-launchpad`, `test-launchpad`) using `LP_` variables that do not collide with the field-guide-api targets, and launchpad port-forwards on a distinct local port
-- [ ] **DEP-05**: `make up-all` brings up the cluster and both apps end-to-end, and `make smoke-launchpad` verifies the dashboard reachable (200 on `/`, `/health`, `/api/status`)
+- [x] **DEP-04**: The Makefile has namespaced launchpad targets (`build-launchpad`, `load-launchpad`, `deploy-launchpad`, `port-forward-launchpad`, `smoke-launchpad`, `test-launchpad`) using `LP_` variables that do not collide with the field-guide-api targets, and launchpad port-forwards on a distinct local port
+- [x] **DEP-05**: `make up-all` brings up the cluster and both apps end-to-end, and `make smoke-launchpad` verifies the dashboard reachable (200 on `/`, `/health`, `/api/status`)
 
 ### Documentation
 
-- [ ] **DOCS-01**: README documents the browser demo flow (`make up-all` → open the dashboard) as the headline demo, with a screenshots plan, while preserving the existing Docker/Helm setup docs
+- [x] **DOCS-01**: README documents the browser demo flow (`make up-all` → open the dashboard) as the headline demo, with a screenshots plan, while preserving the existing Docker/Helm setup docs
 
 ## v2 Requirements
 
@@ -126,9 +126,9 @@ Which phases cover which requirements. Phase assignments populated during roadma
 | DEP-01 | Phase 8 | Complete |
 | DEP-02 | Phase 8 | Complete |
 | DEP-03 | Phase 9 | Pending |
-| DEP-04 | Phase 10 | Pending |
-| DEP-05 | Phase 10 | Pending |
-| DOCS-01 | Phase 10 | Pending |
+| DEP-04 | Phase 10 | Complete |
+| DEP-05 | Phase 10 | Complete |
+| DOCS-01 | Phase 10 | Complete |
 
 **Coverage:**
 - v1 requirements: 27 total
