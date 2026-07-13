@@ -250,3 +250,16 @@ def test_relative_time_hours():
 def test_relative_time_days():
     ts = datetime.now(timezone.utc) - timedelta(days=2, hours=1)
     assert events._relative_time(ts) == "2 days ago"
+
+
+# CR-01 regression: real PyMongo decodes BSON dates as timezone-NAIVE by
+# default (mongomock does not reproduce this), so _relative_time must
+# normalize a naive datetime instead of silently degrading to "unknown".
+def test_relative_time_naive_utc_now_returns_just_now():
+    ts = datetime.utcnow()
+    assert events._relative_time(ts) == "just now"
+
+
+def test_relative_time_naive_utc_past_returns_real_value():
+    ts = datetime.utcnow() - timedelta(minutes=2, seconds=10)
+    assert events._relative_time(ts) == "2 minutes ago"
