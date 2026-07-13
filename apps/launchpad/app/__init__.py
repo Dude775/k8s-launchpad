@@ -46,9 +46,12 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     #    of blocking the sole gunicorn worker for PyMongo's default 30s when
     #    MongoDB is unreachable (readiness must fail by 503, not probe timeout).
     app.config.setdefault("MONGO_SERVER_SELECTION_TIMEOUT_MS", 2000)
+    # tz_aware=True: decode BSON dates as timezone-aware UTC datetimes at the
+    # source, preventing the naive-datetime relative-time degradation (CR-01).
     mongo.init_app(
         app,
         serverSelectionTimeoutMS=app.config["MONGO_SERVER_SELECTION_TIMEOUT_MS"],
+        tz_aware=True,
     )
     metrics.init_app(app)  # also auto-registers the /metrics endpoint
 

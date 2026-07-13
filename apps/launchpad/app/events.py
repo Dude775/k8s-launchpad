@@ -123,6 +123,12 @@ def _relative_time(ts) -> str:
     if ts is None:
         return "unknown"
     try:
+        # CR-01: real PyMongo decodes BSON dates as timezone-NAIVE by default
+        # (mongomock does not reproduce this). Normalize a naive datetime to
+        # UTC-aware before the subtraction below; non-datetime garbage still
+        # raises here and falls through to the except -> "unknown".
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
         delta = datetime.now(timezone.utc) - ts
         seconds = int(delta.total_seconds())
         if seconds < 0:
