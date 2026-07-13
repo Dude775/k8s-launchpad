@@ -112,7 +112,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   3. `make help` lists all six launchpad targets (`build-launchpad`, `load-launchpad`, `deploy-launchpad`, `port-forward-launchpad`, `smoke-launchpad`, `test-launchpad`) with one-line descriptions, without displacing existing field-guide-api targets
   4. The README headline demo shows `make up-all` then opening `http://localhost:8081` as the primary browser demo flow, with a screenshots plan; the existing Docker/Helm setup docs remain intact
 **Plans**: 2 plans
-  - [ ] 10-01-PLAN.md — fill six launchpad Makefile targets + up-all/smoke-all/undeploy-launchpad/verify-ttl + grouped ##@ help + clean-venv/reset-local parity [DEP-04, DEP-05]
+  - [x] 10-01-PLAN.md — fill six launchpad Makefile targets + up-all/smoke-all/undeploy-launchpad/verify-ttl + grouped ##@ help + clean-venv/reset-local parity [DEP-04, DEP-05]
   - [ ] 10-02-PLAN.md — README browser-demo restructure + real screenshots + /health real-output fix + docs/troubleshooting + docs/known-limitations launchpad entries [DOCS-01]
 
 ## Progress
@@ -128,4 +128,4 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 7. Status API + Field-Guide Integration | v1.1 | 2/2 | Complete   | 2026-07-10 |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 2/2 | Complete   | 2026-07-11 |
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 4/4 | Complete   | 2026-07-13 |
-| 10. Makefile Integration + Smoke + Docs | v1.1 | 0/2 | Planned | - |
+| 10. Makefile Integration + Smoke + Docs | v1.1 | 1/2 | In Progress|  |
