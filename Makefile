@@ -25,9 +25,11 @@ LP_CHART   ?= charts/launchpad
 .DEFAULT_GOAL := help
 
 help: ## print this help message (default goal)
-	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} \
-	  /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n"} \
+	  /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2 } \
+	  /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 
+##@ field-guide-api
 test: ## create local venv (idempotent), install dev-deps, run pytest with coverage
 	cd apps/field-guide-api && \
 	{ [ -d .venv ] || $(PYTHON) -m venv .venv; } && \
@@ -152,6 +154,7 @@ smoke: ## background port-forward, curl /health + /entries + /metrics, PASS/FAIL
 	done; \
 	if [ $$STATUS -eq 0 ]; then echo "==> smoke PASSED"; else echo "==> smoke FAILED"; exit 1; fi
 
+##@ Housekeeping
 clean: ## remove local caches, coverage, and temp artifacts (SAFE — no cluster/image/venv changes)
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name '*.pyc' -delete 2>/dev/null || true
@@ -159,14 +162,16 @@ clean: ## remove local caches, coverage, and temp artifacts (SAFE — no cluster
 	find . -name .coverage -delete 2>/dev/null || true
 	find . -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
 
-clean-venv: ## remove the app virtualenv (re-run 'make test' to recreate)
+clean-venv: ## remove both apps' virtualenvs (re-run 'make test'/'make test-launchpad' to recreate)
 	rm -rf apps/field-guide-api/.venv
+	rm -rf apps/launchpad/.venv
 
-reset-local: ## DESTRUCTIVE — undeploy + destroy cluster + registry (loses all data)
+reset-local: ## DESTRUCTIVE — undeploy BOTH releases + destroy cluster + registry (loses all data)
 	@echo "!!"
-	@echo "!! WARNING: This removes the Helm release, kind cluster, and local registry."
-	@echo "!! All in-cluster data (MongoDB PVC contents) will be lost."
+	@echo "!! WARNING: This removes both Helm releases, the kind cluster, and the local registry."
+	@echo "!! All in-cluster data (MongoDB PVC contents, both apps) will be lost."
 	@echo "!!"
 	@read -p "!! Type YES to continue: " confirm && [ "$$confirm" = "YES" ]
 	$(MAKE) undeploy || true
+	$(MAKE) undeploy-launchpad || true
 	$(MAKE) cluster-down
