@@ -1,27 +1,24 @@
 ---
 phase: 09-service-catalog-events-mongodb-crud
-verified: 2026-07-13T00:00:00Z
-status: gaps_found
-score: 6/6 roadmap success criteria verified; 1 critical production-correctness gap found outside literal SC wording
+verified: 2026-07-13T12:00:00Z
+status: passed
+score: 7/7 must-haves verified (6 roadmap SCs + CR-01 gap-closure truth)
 overrides_applied: 0
-gaps:
-  - truth: "FEED-01 Event-Row Anatomy relative-time element renders a real value ('2 minutes ago' style) for events read from the platform's own in-cluster MongoDB"
-    status: failed
-    reason: "app/events.py:_relative_time() subtracts a tz-aware datetime.now(timezone.utc) from the timestamp read back from MongoDB without normalizing tzinfo. flask_pymongo/PyMongo decodes BSON dates as timezone-naive by default (no tz_aware=True set anywhere in app/__init__.py's mongo.init_app() call). The naive-minus-aware subtraction raises TypeError, which the blanket except Exception at events.py:141 swallows into the 'unknown' fallback. Reproduced directly: _relative_time(datetime.utcnow()) == 'unknown' vs _relative_time(datetime.now(timezone.utc)) == 'just now'. Confirmed no test in test_events.py or test_partials.py exercises a naive-datetime input — all 8 _relative_time tests and all mongomock-backed integration tests use tz-aware timestamps, and mongomock (unlike real PyMongo) preserves tzinfo without a BSON round-trip, so the entire test suite is structurally blind to this path. Because Phase 9 co-delivers DEP-03 (launchpad's own real in-cluster MongoDB), this is not a hypothetical future regression — it will reproduce on every event rendered by the live deployment starting with the very first real service_registered/service_deregistered/platform_started event. The provided live-deploy evidence (pods READY, /health 200, /api/status service_count 0) did not exercise event rendering against real Mongo (no service was registered), so it did not catch this."
-    artifacts:
-      - path: "apps/launchpad/app/events.py"
-        issue: "_relative_time() (line 116-142) does not normalize naive datetimes before subtracting from an aware datetime.now(timezone.utc); root cause is app/__init__.py's mongo.init_app() not passing tz_aware=True"
-    missing:
-      - "Either pass tz_aware=True to mongo.init_app() in apps/launchpad/app/__init__.py, or normalize ts.tzinfo is None inside _relative_time() before the subtraction"
-      - "A regression test in test_events.py that passes a naive UTC datetime to _relative_time() and asserts a real relative-time string, not 'unknown'"
+re_verification:
+  previous_status: gaps_found
+  previous_score: "6/6 roadmap SCs verified; 1 critical gap (CR-01) found outside literal SC wording"
+  gaps_closed:
+    - "FEED-01 Event-Row Anatomy relative-time element renders a real value for events read from real MongoDB (CR-01: naive/aware datetime subtraction no longer raises a swallowed TypeError)"
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 9: Service Catalog + Events Feed + MongoDB CRUD Verification Report
 
 **Phase Goal:** Developers can register, view, and deregister services through the dashboard; every platform action writes to a bounded events feed backed by its own in-cluster MongoDB
 **Verified:** 2026-07-13
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Status:** passed
+**Re-verification:** Yes — after gap closure (plan 09-04, commits d4123d0, 8590ac4)
 
 ## Goal Achievement
 
@@ -29,41 +26,43 @@ gaps:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | `GET /catalog` lists services from MongoDB; `POST /catalog/new` with valid input persists, fires `service_registered`, redirects to catalog with new entry visible | VERIFIED | `app/routes/pages.py:catalog_list`/`catalog_new` call `catalog.list_services()`/`catalog.register_service()` + `events.record_event("service_registered", ...)`; `test_catalog_new_post_valid_registers_and_redirects` and `test_catalog_new_post_valid_persists_document` pass (126/126 suite green) |
-| 2 | Invalid/missing required fields re-render form with field-level errors and CSRF intact — no document written | VERIFIED | `ServiceForm` validators in `app/forms.py`; `catalog_new()` re-renders `onboard_form.html` with same form object on `validate_on_submit()` failure; `test_catalog_new_post_invalid_rerenders_without_calling_register` asserts `register_service` NOT called; CSRF wiring proven live by `test_onboard_form_rejects_missing_csrf_token` |
-| 3 | `GET /catalog/<id>` shows full registration fields and that service's related events | VERIFIED | `catalog_detail()` renders `detail.html` with `service` + `events.get_events_for_service(name)`; shared `partials/event_row.html` reused; `test_catalog_detail_shows_registration_and_events` passes |
-| 4 | Deregistering (after confirmation) removes from MongoDB and fires `service_deregistered` visible in feed | VERIFIED | `catalog_delete_confirm()` (GET, zero-JS confirm page) + `catalog_delete()` (POST) call `catalog.deregister_service()` then `events.record_event("service_deregistered", name)`; `test_catalog_delete_post_removes_and_redirects` confirms doc removed and event fired |
-| 5 | `events` collection has TTL index on `ts`; `make test-launchpad` passes (mongomock-backed); suite documents TTL expiry is verified live via smoke, not unit tests | VERIFIED | `events.ensure_indexes()` calls `create_index("ts", expireAfterSeconds=...)`; `test_ensure_indexes_ttl_expire_after_seconds_default` asserts `index_information()["ts_1"]["expireAfterSeconds"] == 604800`; `conftest.py` documents the mongomock TTL non-expiry limitation; independently re-ran `pytest --cov=app --cov-fail-under=100` → 126 passed, 100% coverage |
-| 6 | launchpad Helm chart embeds `mongo:7` manifests in `charts/launchpad/templates/mongodb/` with database `launchpad`; field-guide-api chart untouched | VERIFIED | Independently ran `helm lint charts/launchpad/` → 0 failures (1 informational icon notice only); `helm template` renders a second `mongo:7` Deployment + `27017` ClusterIP Service; `values.yaml` `mongodb.auth.database: launchpad`; `git status --short charts/field-guide-api/` prints nothing |
+| 1 | `GET /catalog` lists services from MongoDB; `POST /catalog/new` with valid input persists, fires `service_registered`, redirects to catalog with new entry visible | VERIFIED | `app/routes/pages.py:catalog_list`/`catalog_new` call `catalog.list_services()`/`catalog.register_service()` + `events.record_event("service_registered", ...)`; file re-read this pass, unchanged since prior verification and still present |
+| 2 | Invalid/missing required fields re-render form with field-level errors and CSRF intact — no document written | VERIFIED | `ServiceForm` validators in `app/forms.py`; `catalog_new()` re-renders `onboard_form.html` on `validate_on_submit()` failure; unchanged since prior pass |
+| 3 | `GET /catalog/<id>` shows full registration fields and that service's related events | VERIFIED | `catalog_detail()` renders `detail.html` with `service` + `events.get_events_for_service(name)`; template file re-confirmed present |
+| 4 | Deregistering (after confirmation) removes from MongoDB and fires `service_deregistered` visible in feed | VERIFIED | `catalog_delete_confirm()`/`catalog_delete()` call `catalog.deregister_service()` then `events.record_event("service_deregistered", name)`; unchanged |
+| 5 | `events` collection has TTL index on `ts`; `make test-launchpad` passes (mongomock-backed); suite documents TTL expiry is verified live via smoke, not unit tests | VERIFIED | `events.ensure_indexes()` unchanged; independently re-ran `pytest --cov=app --cov-fail-under=100` this session → **128 passed, 100.00% coverage** (up from 126 pre-gap-closure — the 2 new CR-01 regression tests) |
+| 6 | launchpad Helm chart embeds `mongo:7` manifests in `charts/launchpad/templates/mongodb/` with database `launchpad`; field-guide-api chart untouched | VERIFIED | Independently re-ran `helm lint charts/launchpad/` this session → 0 failures (1 informational icon notice only); `git status --short` clean, no chart drift |
+| 7 (gap-closure) | FEED-01 Event-Row Anatomy relative-time element renders a real value ("2 minutes ago" style) for events read from real MongoDB — CR-01 closed | VERIFIED | Direct reproduction run this session (not trusting SUMMARY): `events._relative_time(datetime.utcnow())` → `"just now"`; naive datetime ~2min in past → `"2 minutes ago"`; `None` → `"unknown"`; garbage string → `"unknown"` (never-raise discipline intact). Source: `app/events.py:130-131` normalizes `ts.tzinfo is None` before subtraction; `app/__init__.py:51-55` passes `tz_aware=True` to `mongo.init_app()`. Both layers present exactly as the gap-closure plan specified. |
 
-**Score:** 6/6 roadmap Success Criteria verified as literally worded.
-
-**Note on Truth 3/4 in production:** while the events ARE shown on the detail page and feed, their relative-time display degrades to "unknown" against real MongoDB — see Gap below. This does not violate the literal SC wording (events are still visible/present) but undermines the FEED-01 contract's Event-Row Anatomy in the live deployment this phase's own DEP-03 work enables.
+**Score:** 7/7 — all 6 roadmap Success Criteria plus the CR-01 gap-closure truth verified true in the codebase.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `apps/launchpad/app/catalog.py` | never-raise CRUD helper | VERIFIED | `ensure_indexes/list_services/get_service/register_service/deregister_service` all present, never-raise, 100% covered |
-| `apps/launchpad/app/events.py` | never-raise events helper | VERIFIED (with defect) | All interface functions present and wired; `_relative_time` substantive but produces wrong output for real-Mongo naive datetimes (CR-01) |
-| `apps/launchpad/app/forms.py` | `ServiceForm` with locked validators/copy | VERIFIED | Regexp/URL/Length/DataRequired validators match UI-SPEC locked copy exactly; scheme-restriction rejects `javascript:`/`ftp:` |
-| `apps/launchpad/app/routes/pages.py` | real catalog CRUD routes | VERIFIED | `catalog_list/catalog_new/catalog_detail/catalog_delete_confirm/catalog_delete`, module-attribute imports (`from app import catalog, events`) confirmed, no direct-name imports |
-| `apps/launchpad/app/routes/partials.py` | `/partials/feed` fragment/full-page | VERIFIED | HX-Request branch mirrors existing status-cards/cluster-state pattern |
-| Seven templates (catalog, onboard_form, detail, confirm_delete, feed, feed_full_page, event_row, feed_events) | real markup, no placeholders | VERIFIED | All read directly; no stub/placeholder copy; anti-pattern grep clean |
-| `charts/launchpad/templates/mongodb/{deployment,pvc,secret,service}.yaml` | mongo:7 manifests | VERIFIED | All four files present; `helm template` renders `mongo:7` Deployment + Service on 27017 |
-| `charts/launchpad/templates/_helpers.tpl` | `launchpad.mongodb.fullname` + `launchpad.mongodb.selectorLabels` | VERIFIED | Both helpers defined; selector labels distinct from app `launchpad.selectorLabels` (grep confirms `-mongodb` suffix) |
+| `apps/launchpad/app/catalog.py` | never-raise CRUD helper | VERIFIED | Present, unchanged since prior pass |
+| `apps/launchpad/app/events.py` | never-raise events helper | VERIFIED | `_relative_time` now normalizes naive datetimes (lines 126-131) before subtraction — CR-01 fix confirmed in source, not just SUMMARY narration |
+| `apps/launchpad/app/__init__.py` | mongo.init_app with tz_aware=True | VERIFIED | `mongo.init_app(app, serverSelectionTimeoutMS=..., tz_aware=True)` at lines 51-55, with inline CR-01 rationale comment |
+| `apps/launchpad/tests/test_events.py` | naive-datetime regression tests | VERIFIED | `test_relative_time_naive_utc_now_returns_just_now` and `test_relative_time_naive_utc_past_returns_real_value` present at lines 258-265, both pass; existing 6 tz-aware tests + None/garbage tests untouched and still pass |
+| `apps/launchpad/app/forms.py` | `ServiceForm` with locked validators/copy | VERIFIED | Unchanged since prior pass |
+| `apps/launchpad/app/routes/pages.py` | real catalog CRUD routes | VERIFIED | Unchanged since prior pass |
+| `apps/launchpad/app/routes/partials.py` | `/partials/feed` fragment/full-page | VERIFIED | Unchanged since prior pass |
+| Seven templates (catalog, onboard_form, detail, confirm_delete, feed, feed_full_page, event_row, feed_events) | real markup, no placeholders | VERIFIED | All confirmed present via filesystem listing this session |
+| `charts/launchpad/templates/mongodb/{deployment,pvc,secret,service}.yaml` | mongo:7 manifests | VERIFIED | All four files confirmed present this session |
+| `charts/launchpad/templates/_helpers.tpl` | `launchpad.mongodb.fullname` + `launchpad.mongodb.selectorLabels` | VERIFIED | Unchanged since prior pass |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|-----|-----|--------|---------|
-| `pages.py` | `app.catalog`/`app.events` | module-attribute calls | WIRED | `from app import catalog, events`; no `from app.catalog import` / `from app.events import` direct-name imports found (grep-verified; only a docstring comment mentions the pattern to avoid) |
-| `catalog.py` | `mongo.db.services` | insert_one/find/delete_one + unique index | WIRED | Confirmed in source; unique index created via `create_index("name", unique=True)` |
-| `events.py` | `mongo.db.events` | insert_one/find sorted by ts + TTL index | WIRED | Confirmed; TTL index test asserts `expireAfterSeconds == 604800` |
-| `feed.html` | `partials.feed` | hx-get visibility-guarded 15s poll | WIRED | `hx-get="{{ url_for('partials.feed') }}"`, `every 15s [document.visibilityState === 'visible']` present; `every 10s` absent |
-| `detail.html` | `partials/event_row.html` | include in loop | WIRED | `{% include "partials/event_row.html" %}` present, shared with `feed_events.html` |
-| `values.yaml (mongoUri)` | `launchpad.mongodb.fullname` Service hostname | in-cluster DNS string | WIRED (hardcoded, not templated) | Functional for default release name; WR-01 (chart review) flags this as a plain string rather than composed via the helper — a maintainability/drift risk, not a functional break for the default install |
-| `deployment.yaml` | `SECRET_KEY`/`EVENTS_TTL_SECONDS` | secretKeyRef/configMapKeyRef | WIRED | Confirmed via `helm template` output — both env vars present with correct refs |
+| `pages.py` | `app.catalog`/`app.events` | module-attribute calls | WIRED | Unchanged since prior pass |
+| `catalog.py` | `mongo.db.services` | insert_one/find/delete_one + unique index | WIRED | Unchanged |
+| `events.py` | `mongo.db.events` | insert_one/find sorted by ts + TTL index | WIRED | Unchanged |
+| `events.py::_relative_time` | `datetime.now(timezone.utc)` subtraction | tzinfo normalization guard | WIRED | `if ts.tzinfo is None: ts = ts.replace(tzinfo=timezone.utc)` executes before every subtraction; verified live via direct interpreter reproduction, not just grep |
+| `__init__.py::create_app` | `mongo.init_app` | `tz_aware=True` kwarg | WIRED | Confirmed via `grep -n "tz_aware" app/__init__.py` → match at line 54, and functionally via the direct reproduction (naive-in real Mongo path is now moot since the guard covers it defensively regardless) |
+| `test_events.py` | `app.events._relative_time` | naive-datetime input assertions | WIRED | Both new tests call `_relative_time` directly with `datetime.utcnow()`-derived naive values and assert non-"unknown" real strings; both pass |
+| `feed.html` | `partials.feed` | hx-get visibility-guarded 15s poll | WIRED | Unchanged since prior pass |
+| `detail.html` | `partials/event_row.html` | include in loop | WIRED | Unchanged since prior pass |
 
 ### Data-Flow Trace (Level 4)
 
@@ -72,17 +71,20 @@ gaps:
 | `catalog.html` | `services` | `catalog.list_services()` → `mongo.db.services.find()` | Yes | FLOWING |
 | `detail.html` | `events_for_service` | `events.get_events_for_service(name)` → `mongo.db.events.find(...)` | Yes | FLOWING |
 | `partials/feed_events.html` | `events_list` | `events.list_recent_events()` → `mongo.db.events.find().sort(...)` | Yes | FLOWING |
-| `partials/event_row.html` | `events._relative_time(event.ts)` | timestamp from a real MongoDB read (naive datetime) | **No — reproducibly wrong** | ⚠️ HOLLOW — the row itself renders (glyph, label, service link all correct) but the relative-time cell silently degrades to "unknown" for every event once `events.ts` originates from real (non-mongomock) MongoDB |
+| `partials/event_row.html` | `events._relative_time(event.ts)` | timestamp from a real MongoDB read (now tz-aware at source, and defensively normalized regardless) | **Yes — reproduced fixed** | ✓ FLOWING (previously HOLLOW under CR-01; direct reproduction this session confirms naive input now yields real relative-time strings, not "unknown") |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Full test suite passes at 100% coverage | `.venv/Scripts/python -m pytest --cov=app --cov-fail-under=100 -q` (run independently, not trusting SUMMARY claim) | 126 passed, TOTAL coverage 100.00% | PASS |
-| `helm lint` passes | `helm lint charts/launchpad/` (run independently) | 1 chart linted, 0 failed (1 INFO: missing icon) | PASS |
-| `helm template` renders mongo:7 + app Deployments, SECRET_KEY/EVENTS_TTL_SECONDS env, database `launchpad` | `helm template launchpad charts/launchpad/` | Confirmed both Deployments, Service on 27017, `mongodb.auth.database: launchpad`, `mongoUri` targets `launchpad-mongodb` | PASS |
-| `git status --short charts/field-guide-api/` empty (untouched) | `git status --short charts/field-guide-api/` | (empty output) | PASS |
-| CR-01 reproduction: naive datetime → `_relative_time` == "unknown"; aware datetime → real value | `python -c "... _relative_time(datetime.utcnow()) vs _relative_time(datetime.now(timezone.utc))"` | naive → `'unknown'`; aware → `'just now'` | CONFIRMED (defect reproduced) |
+| Full test suite passes at 100% coverage (independently re-run, not trusting SUMMARY) | `.venv/Scripts/python -m pytest --cov=app --cov-fail-under=100 -q` | 128 passed, TOTAL coverage 100.00% | PASS |
+| `helm lint` passes (independently re-run) | `helm lint charts/launchpad/` | 1 chart linted, 0 failed (1 INFO: missing icon) | PASS |
+| Working tree matches committed state | `git status --short` | (empty output) | PASS |
+| CR-01 fix reproduction: naive datetime → real relative-time string | `python -c "... events._relative_time(datetime.utcnow())"` | `"just now"` (was `"unknown"` pre-fix) | PASS — gap closed |
+| CR-01 fix reproduction: naive datetime ~2min in past → real relative-time string | `python -c "... events._relative_time(datetime.utcnow() - timedelta(minutes=2, seconds=10))"` | `"2 minutes ago"` | PASS — gap closed |
+| Never-raise discipline preserved: None / garbage still "unknown" | `python -c "... events._relative_time(None); events._relative_time('not-a-timestamp')"` | `"unknown"`, `"unknown"` | PASS — no regression |
+| Task commits present in git history | `git log --oneline -- app/events.py app/__init__.py tests/test_events.py` | `8590ac4 fix(09-04)...`, `d4123d0 test(09-04)...` present | PASS |
+| No new debt markers introduced in modified files | `grep -n "TODO\|FIXME\|XXX\|TBD\|PLACEHOLDER\|HACK" app/events.py app/__init__.py tests/test_events.py` | (no matches) | PASS |
 
 ### Requirements Coverage
 
@@ -91,41 +93,43 @@ gaps:
 | CAT-01 | 09-02 | View service catalog listing | SATISFIED | `catalog_list()` + `catalog.html` table/empty-state |
 | CAT-02 | 09-01, 09-02 | Onboard a service via form, persists to MongoDB | SATISFIED | `ServiceForm` + `catalog.register_service()` + `catalog_new()` POST path |
 | CAT-03 | 09-01, 09-02 | Server-side validation (CSRF-protected), re-render with field errors | SATISFIED | CSRF-enabled test + invalid-submit re-render test both pass |
-| CAT-04 | 09-02 | Service detail page: registration + related events | SATISFIED | `catalog_detail()` + `detail.html` (events display, though relative-time degrades — see gap) |
+| CAT-04 | 09-02 | Service detail page: registration + related events | SATISFIED | `catalog_detail()` + `detail.html`, events display now correctly time-stamped |
 | CAT-05 | 09-02 | Deregister after confirmation | SATISFIED | `catalog_delete_confirm()` (zero-JS) + `catalog_delete()` POST |
-| FEED-01 | 09-01 (helper), 09-02 (route) | Activity/events feed, newest-first, persisted MongoDB collection | PARTIALLY SATISFIED | Feed route/template/data flow all real and wired; the "2 minutes ago"-style relative-time element of the Event-Row Anatomy contract fails against real MongoDB (CR-01) |
-| FEED-02 | 09-01, 09-02 | platform_started / service_registered / service_deregistered all write events | SATISFIED | `emit_platform_started_once()`, and both catalog routes call `events.record_event()` on success |
+| FEED-01 | 09-01 (helper), 09-02 (route), **09-04 (gap closure)** | Activity/events feed, newest-first, persisted MongoDB collection, real relative-time display | **SATISFIED (gap closed)** | Feed route/template/data flow real and wired; relative-time element now renders correctly against real (naive-decoding) MongoDB reads — CR-01 fixed and regression-tested |
+| FEED-02 | 09-01, 09-02 | platform_started / service_registered / service_deregistered all write events | SATISFIED | `emit_platform_started_once()`, both catalog routes call `events.record_event()` on success |
 | FEED-03 | 09-01 | TTL-bounded events collection | SATISFIED | TTL index test + `EVENTS_TTL_SECONDS` config plumbed through chart ConfigMap |
-| DEP-03 | 09-03 | In-cluster MongoDB via mirrored mongo:7 manifests, field-guide-api untouched | SATISFIED | Chart artifacts verified independently; live-deploy evidence (pods READY, /health 200) provided and consistent with SUMMARY claims |
+| DEP-03 | 09-03 | In-cluster MongoDB via mirrored mongo:7 manifests, field-guide-api untouched | SATISFIED | Chart artifacts re-confirmed present; `helm lint`/`git status` clean this session |
 
-No orphaned requirements — all 9 IDs from REQUIREMENTS.md Phase 9 rows are claimed across the three plans' frontmatter.
+No orphaned requirements — all 9 IDs from REQUIREMENTS.md Phase 9 rows (CAT-01..05, FEED-01..03, DEP-03) are claimed across the four plans' frontmatter (09-01 through 09-04).
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| `apps/launchpad/app/events.py` | 126, `__init__.py` 49-52 | Broad `except Exception` masking a real `TypeError` from naive/aware datetime subtraction (CR-01, confirmed via code review + independent reproduction) | Blocker-level correctness defect (not a debt marker; no TODO/FIXME present) | Every event rendered against real MongoDB shows "unknown" instead of a relative timestamp — a silent, untested, production-only failure mode |
-| `charts/launchpad/values.yaml:72` | — | `mongoUri` hardcodes hostname+credentials instead of composing via `launchpad.mongodb.fullname`/`mongodb.auth.*` (WR-01, code review) | Warning | Two-value desync risk on password rotation or non-default release name; does not block default-path functionality |
-| `apps/launchpad/app/templates/detail.html:12` | 12 | `repo_url` rendered as raw href with no scheme re-check at render boundary (WR-02, code review) | Warning | Stored-XSS vector if a document ever bypasses `ServiceForm` (e.g. direct DB write); form itself does enforce scheme today |
-| `apps/launchpad/app/config.py:55` | 55 | `EVENTS_TTL_SECONDS` int() parse at import time, no try/except (WR-03, code review) | Warning | Malformed env var crash-loops gunicorn at boot instead of degrading; breaks the never-raise discipline used everywhere else |
-| `apps/launchpad/app/templates/partials/event_row.html:19-24` | 19-24 | Catch-all `{% else %}` labels any unrecognized event type as "Platform started" (WR-04, code review) | Warning | Silently mislabels data the moment a future event type is introduced |
-| `charts/launchpad/templates/mongodb/pvc.yaml`, `values.yaml:59` | — | `mongodb.persistence.enabled` flag is declared but never read by any template (WR-05, code review) | Warning | Dead config knob; disabling persistence has no effect, contrary to what the values schema implies |
+| `charts/launchpad/values.yaml:72` | — | `mongoUri` hardcodes hostname+credentials instead of composing via `launchpad.mongodb.fullname`/`mongodb.auth.*` (WR-01, carried over from prior code review) | Warning | Two-value desync risk on password rotation or non-default release name; does not block default-path functionality. Correctly left untouched — 09-04's plan explicitly scoped out WR-01..WR-05 |
+| `apps/launchpad/app/templates/detail.html:12` | 12 | `repo_url` rendered as raw href with no scheme re-check at render boundary (WR-02, carried over) | Warning | Stored-XSS vector only if a document bypasses `ServiceForm`; form itself enforces scheme today |
+| `apps/launchpad/app/config.py:55` | 55 | `EVENTS_TTL_SECONDS` int() parse at import time, no try/except (WR-03, carried over) | Warning | Malformed env var crash-loops gunicorn at boot; breaks never-raise discipline used elsewhere |
+| `apps/launchpad/app/templates/partials/event_row.html:19-24` | 19-24 | Catch-all `{% else %}` labels any unrecognized event type as "Platform started" (WR-04, carried over) | Warning | Silently mislabels data if a future event type is introduced |
+| `charts/launchpad/templates/mongodb/pvc.yaml`, `values.yaml:59` | — | `mongodb.persistence.enabled` flag declared but never read by any template (WR-05, carried over) | Warning | Dead config knob |
 
-All 5 warnings from the code review (09-REVIEW.md) were independently confirmed present in the current code during this verification pass.
+The prior BLOCKER-level finding (CR-01: broad `except Exception` masking the naive/aware `TypeError`) is now resolved — the exception path is still present (by design, for None/garbage inputs) but the naive-datetime case that used to trigger it is intercepted upstream by the new normalization guard, confirmed via direct reproduction. No new anti-patterns introduced by the gap-closure changes (checked `events.py`, `__init__.py`, `test_events.py` for TODO/FIXME/XXX/TBD/PLACEHOLDER/HACK — none found). The 5 pre-existing WARNING-level findings (WR-01..WR-05) are unchanged and were correctly out of scope for this gap-closure plan per its own stated constraints.
 
 ### Human Verification Required
 
-None — all success criteria and the CR-01 defect are independently confirmable by code/test inspection and reproduction; no visual/UX/real-time judgment call remains open. The live-deploy evidence already provided (pods READY 1/1, /health 200, /api/status clean) is accepted as sufficient for DEP-03's infra claim.
+None — all success criteria and the CR-01 gap closure are independently confirmable by direct code inspection, test execution, and interpreter-level reproduction. No visual/UX/real-time judgment call remains open.
 
 ### Gaps Summary
 
-All 6 literal Success Criteria from the roadmap are verified true in the codebase — the CRUD flows, form validation, CSRF, TTL index, and Helm chart mirroring all function and are test-covered. Independent test-suite and `helm lint`/`helm template` re-runs confirm the SUMMARY's claims rather than merely trusting them.
+All 6 literal roadmap Success Criteria remain verified true, and the sole open gap from the prior verification pass (CR-01: `events._relative_time()` silently rendering "unknown" for every event once read from real in-cluster MongoDB, because PyMongo decodes BSON dates as timezone-naive and the naive/aware subtraction raised a swallowed `TypeError`) is now closed.
 
-However, one Critical code-review finding (CR-01) is a genuine, reproduced, unmitigated production-correctness defect that this verification independently confirmed in the source: `events._relative_time()` will render "unknown" instead of a real relative timestamp for every single event once the app is reading from its own real in-cluster MongoDB — which is exactly the environment DEP-03 (also delivered in this phase) stands up. The bug is invisible to the entire test suite because mongomock preserves `tzinfo` without a BSON round-trip and no test constructs a naive-datetime input. The live-deploy evidence provided for this phase did not exercise event rendering (service_count was 0, no registration was performed against real Mongo), so it did not catch the defect either.
+Verification of the closure was performed independently, not by trusting 09-04-SUMMARY.md's claims:
+- Read the actual diff in `app/events.py` (lines 126-131) and `app/__init__.py` (lines 49-55) — both fix layers present exactly as the gap-closure plan specified (defensive normalization guard + `tz_aware=True` at the driver).
+- Re-ran the full test suite independently (not copy-pasting the SUMMARY's reported numbers): 128 passed, 100.00% coverage, matching the SUMMARY's claim.
+- Ran a direct interpreter reproduction of the exact failure mode documented in the original gap (naive `datetime.utcnow()` input) and confirmed it now returns `"just now"` / `"2 minutes ago"` instead of `"unknown"`.
+- Confirmed the never-raise discipline is unbroken: `None` and non-datetime garbage inputs still correctly degrade to `"unknown"`.
+- Confirmed no regressions: `git status --short` clean, `helm lint` still 0 failures, no new debt markers in modified files, WR-01..WR-05 warnings correctly left untouched per the gap-closure plan's explicit scope constraint.
 
-This does not violate the literal wording of any of the 6 roadmap Success Criteria (events are still recorded and displayed — only their timestamp degrades), so it is reported as a gap rather than a Success-Criteria FAIL. Given it is rated Critical by the code review, is fully reproduced here, has zero test coverage of the failing path, and directly undermines the FEED-01 Event-Row Anatomy contract the moment this phase's own MongoDB goes live, it should be closed before the milestone is considered done — either via a small closure plan or an explicit override if the team accepts shipping with degraded timestamps for now.
-
-**This looks like an unintentional gap, not a deliberate deviation** — no override is suggested; recommend a small closure plan (one-line fix in `app/__init__.py`'s `mongo.init_app(tz_aware=True)` call, or a normalization guard in `_relative_time`, plus one regression test with a naive-datetime input).
+Phase 9 goal is achieved: developers can register, view, and deregister services through the dashboard, and every platform action writes to a bounded events feed backed by its own in-cluster MongoDB — including a correctly rendering relative-time display now that the timezone-naive/aware datetime defect is fixed.
 
 ---
 
