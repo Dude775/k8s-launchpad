@@ -19,8 +19,8 @@ LP_RELEASE ?= launchpad
 LP_CHART   ?= charts/launchpad
 
 # ─── Targets ──────────────────────────────────────────────────────────────────
-# Phase 1: test | Phase 2: cluster-up, cluster-down | Phase 3: build, load, deploy, undeploy | Phase 4: help, up, check-tools, port-forward, smoke, clean, clean-venv, reset-local | Phase 5: test-launchpad, build-launchpad, load-launchpad, deploy-launchpad, port-forward-launchpad, smoke-launchpad
-.PHONY: test cluster-up cluster-down build load deploy undeploy help up check-tools port-forward smoke clean clean-venv reset-local test-launchpad build-launchpad load-launchpad deploy-launchpad port-forward-launchpad smoke-launchpad
+# Phase 1: test | Phase 2: cluster-up, cluster-down | Phase 3: build, load, deploy, undeploy | Phase 4: help, up, check-tools, port-forward, smoke, clean, clean-venv, reset-local | Phase 5: test-launchpad, build-launchpad, load-launchpad, deploy-launchpad, port-forward-launchpad, smoke-launchpad | Phase 10: up-all, smoke-all, undeploy-launchpad, verify-ttl
+.PHONY: test cluster-up cluster-down build load deploy undeploy help up check-tools port-forward smoke clean clean-venv reset-local test-launchpad build-launchpad load-launchpad deploy-launchpad port-forward-launchpad smoke-launchpad up-all smoke-all undeploy-launchpad verify-ttl
 
 .DEFAULT_GOAL := help
 
@@ -35,9 +35,8 @@ test: ## create local venv (idempotent), install dev-deps, run pytest with cover
 	"$$VENV_PY" -m pip install -q -r requirements-dev.txt && \
 	"$$VENV_PY" -m pytest
 
-# ─── launchpad targets (Phase 5) ──────────────────────────────────────────────
-# test-launchpad works today; the deploy-related targets are guarded stubs until
-# Phase 8 (Helm chart + cluster deploy) and Phase 10 (smoke) fill them in place.
+##@ launchpad
+# ─── launchpad targets (Phase 5, filled in Phase 8/10) ────────────────────────
 test-launchpad: ## create launchpad venv (idempotent), install dev-deps, run pytest with coverage
 	cd apps/launchpad && \
 	{ [ -d .venv ] || $(PYTHON) -m venv .venv; } && \
@@ -45,27 +44,52 @@ test-launchpad: ## create launchpad venv (idempotent), install dev-deps, run pyt
 	"$$VENV_PY" -m pip install -q -r requirements-dev.txt && \
 	"$$VENV_PY" -m pytest
 
-build-launchpad: ## (stub) build launchpad image — available in Phase 8 (Helm chart + cluster deploy)
-	@echo "build-launchpad: available in Phase 8 (Helm chart + cluster deploy)"
+build-launchpad: ## build the launchpad Docker image and tag it for the local registry
+	docker build -t $(LP_IMAGE):$(LP_TAG) apps/launchpad
 
-load-launchpad: ## (stub) push launchpad image to local registry — available in Phase 8
-	@echo "load-launchpad: available in Phase 8 (Helm chart + cluster deploy)"
+load-launchpad: ## push the built launchpad image to the local kind registry (localhost:5001)
+	docker push $(LP_IMAGE):$(LP_TAG)
 
-deploy-launchpad: ## (stub) helm install launchpad — available in Phase 8
-	@echo "deploy-launchpad: available in Phase 8 (Helm chart + cluster deploy)"
+# LP_IMAGE/LP_TAG are forwarded to the chart so build-launchpad/load-launchpad/deploy-launchpad stay coordinated:
+#   make build-launchpad LP_TAG=v1.0 && make load-launchpad LP_TAG=v1.0 && make deploy-launchpad LP_TAG=v1.0
+deploy-launchpad: ## install or upgrade the launchpad Helm release (idempotent; helm upgrade --install)
+	helm upgrade --install $(LP_RELEASE) $(LP_CHART) \
+		--set image.repository=$(LP_IMAGE) --set image.tag=$(LP_TAG) \
+		--wait --timeout 180s
 
-port-forward-launchpad: ## (stub) forward launchpad svc to localhost — available in Phase 8
-	@echo "port-forward-launchpad: available in Phase 8 (Helm chart + cluster deploy)"
+port-forward-launchpad: ## forward svc/launchpad to localhost:8081 (Ctrl-C to stop)
+	kubectl port-forward svc/$(LP_RELEASE) 8081:80
 
-smoke-launchpad: ## (stub) smoke-test launchpad endpoints — available in Phase 10
-	@echo "smoke-launchpad: available in Phase 10 (end-to-end smoke)"
+smoke-launchpad: ## background port-forward, curl /, /health, /api/status, PASS/FAIL, cleanup
+	@echo "==> Starting launchpad smoke test..."; \
+	pkill -f "kubectl port-forward svc/$(LP_RELEASE)" 2>/dev/null || true; \
+	kubectl port-forward svc/$(LP_RELEASE) 8081:80 &>/dev/null & \
+	PF_PID=$$!; \
+	trap "kill $$PF_PID 2>/dev/null || true" EXIT; \
+	sleep 3; \
+	STATUS=0; \
+	for endpoint in "" health api/status; do \
+	  CODE=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/$$endpoint); \
+	  if [ "$$CODE" = "200" ]; then \
+	    echo "  PASS  /$$endpoint → $$CODE"; \
+	  else \
+	    echo "  FAIL  /$$endpoint → $$CODE"; \
+	    STATUS=1; \
+	  fi; \
+	done; \
+	if [ $$STATUS -eq 0 ]; then echo "==> launchpad smoke PASSED"; else echo "==> launchpad smoke FAILED"; exit 1; fi
 
+undeploy-launchpad: ## remove the launchpad Helm release and all chart-owned resources
+	helm uninstall $(LP_RELEASE)
+
+##@ Cluster
 cluster-up: ## create kind cluster + local registry (idempotent)
 	bash scripts/cluster-setup.sh
 
 cluster-down: ## tear down kind cluster + registry (idempotent)
 	bash scripts/cluster-teardown.sh
 
+##@ field-guide-api
 build: ## build the field-guide-api Docker image and tag it for the local registry
 	docker build -t $(IMAGE):$(TAG) apps/field-guide-api
 
@@ -83,6 +107,14 @@ undeploy: ## remove the Helm release and all chart-owned resources
 	helm uninstall $(RELEASE)
 
 up: cluster-up build load deploy  ## bring up the full local stack (cluster-up → build → load → deploy)
+
+up-all: up build-launchpad load-launchpad deploy-launchpad  ## bring up cluster + BOTH apps (up, then launchpad build/load/deploy)
+	@echo ""
+	@echo "==> up-all complete. Both apps deployed."
+	@echo "==> Next: make port-forward-launchpad  (then open http://localhost:8081)"
+	@echo "==> Then: make smoke-all"
+
+smoke-all: smoke smoke-launchpad  ## smoke-test BOTH apps (field-guide-api on 8080, launchpad on 8081)
 
 check-tools: ## verify required tools are on PATH and print versions
 	@echo "==> Checking required tools..."; \
