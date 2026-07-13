@@ -26,7 +26,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 - [x] **Phase 7: Status API + Field-Guide Integration** — platform status contract defined; /health safe for Kubernetes readinessProbe (completed 2026-07-10)
 - [x] **Phase 8: Helm Chart + K8s Diagnostics** — launchpad deploys to kind via Helm with RBAC; diagnostics page shows live cluster state (completed 2026-07-11)
 - [x] **Phase 9: Service Catalog + Events / MongoDB CRUD** — developers can register and deregister services; events feed is bounded by TTL (completed 2026-07-12)
-- [ ] **Phase 10: Makefile Integration + Smoke + Docs** — make up-all delivers both apps; dashboard is demoable to a human reviewer
+- [x] **Phase 10: Makefile Integration + Smoke + Docs** — make up-all delivers both apps; dashboard is demoable to a human reviewer (completed 2026-07-13)
 
 ## Phase Details
 
@@ -113,7 +113,7 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   4. The README headline demo shows `make up-all` then opening `http://localhost:8081` as the primary browser demo flow, with a screenshots plan; the existing Docker/Helm setup docs remain intact
 **Plans**: 2 plans
   - [x] 10-01-PLAN.md — fill six launchpad Makefile targets + up-all/smoke-all/undeploy-launchpad/verify-ttl + grouped ##@ help + clean-venv/reset-local parity [DEP-04, DEP-05]
-  - [ ] 10-02-PLAN.md — README browser-demo restructure + real screenshots + /health real-output fix + docs/troubleshooting + docs/known-limitations launchpad entries [DOCS-01]
+  - [x] 10-02-PLAN.md — README browser-demo restructure + real screenshots + /health real-output fix + docs/troubleshooting + docs/known-limitations launchpad entries [DOCS-01]
 
 ## Progress
 
@@ -128,4 +128,4 @@ Full phase details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 7. Status API + Field-Guide Integration | v1.1 | 2/2 | Complete   | 2026-07-10 |
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 2/2 | Complete   | 2026-07-11 |
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 4/4 | Complete   | 2026-07-13 |
-| 10. Makefile Integration + Smoke + Docs | v1.1 | 1/2 | In Progress|  |
+| 10. Makefile Integration + Smoke + Docs | v1.1 | 2/2 | Complete   | 2026-07-13 |
