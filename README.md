@@ -5,12 +5,26 @@ cluster. k8s-launchpad automatically builds (Docker), deploys (Helm), syncs (Arg
 (Prometheus/Grafana/Loki), and security-scans (Trivy) applications from a registered Git repo.
 Built as a portfolio piece to demonstrate platform-engineering-level thinking.
 
-**PRD-1 scope (this milestone):** monorepo layout, a Flask field-guide API as the platform's
-dogfood app, containerisation, a local kind cluster with a local registry, and Helm deployment.
-Everything runs locally and for free. One command brings it all up:
+**v1.1 (Product Dashboard):** a browser-based local IDP dashboard (`apps/launchpad/`) sits
+alongside the PRD-1 field-guide API — service catalog, diagnostics, and an activity feed, all
+backed by in-cluster MongoDB. Everything runs locally and for free. One command brings up the
+full stack, both apps included:
 
+```bash
+make up-all
 ```
-make cluster-up && make build && make load && make deploy
+
+Then, in a second terminal:
+
+```bash
+make port-forward-launchpad
+```
+
+Open **http://localhost:8081** in a browser to see the live dashboard. Verify everything is
+reachable with:
+
+```bash
+make smoke-all
 ```
 
 ## Architecture
@@ -66,12 +80,22 @@ for `winget` install commands, the `MSYS_NO_PATHCONV` explanation, and WSL2 as a
 ```bash
 git clone https://github.com/Dude775/k8s-launchpad.git
 cd k8s-launchpad
-make check-tools   # verify Docker, kind, Helm, kubectl, bash are on PATH
-make up            # cluster-up → build → load → deploy (full stack in one command)
-make smoke         # curl /health, /entries, /metrics — all must return 200
+make check-tools           # verify Docker, kind, Helm, kubectl, bash are on PATH
+make up-all                # cluster-up → build/load/deploy BOTH apps (one command)
+make port-forward-launchpad  # in a second terminal — forwards svc/launchpad to :8081
+# open http://localhost:8081 in a browser
+make smoke-all              # curl-verify both apps (field-guide-api on 8080, launchpad on 8081)
 ```
 
-Expected `make smoke` output:
+Expected `make up-all` epilogue:
+
+```
+==> up-all complete. Both apps deployed.
+==> Next: make port-forward-launchpad  (then open http://localhost:8081)
+==> Then: make smoke-all
+```
+
+Expected `make smoke-all` output:
 
 ```
 ==> Starting smoke test...
@@ -79,9 +103,49 @@ Expected `make smoke` output:
   PASS  /entries → 200
   PASS  /metrics → 200
 ==> smoke PASSED
+==> Starting launchpad smoke test...
+  PASS  / → 200
+  PASS  /health → 200
+  PASS  /api/status → 200
+==> launchpad smoke PASSED
 ```
 
-## Developer Loop
+Run `make help` (or bare `make`) for the full target listing with one-line descriptions,
+grouped by Cluster / field-guide-api / launchpad / Housekeeping.
+
+## Demo Flow — Launchpad Dashboard
+
+The headline demo is the browser dashboard, reachable after `make up-all` +
+`make port-forward-launchpad` at **http://localhost:8081**:
+
+![Launchpad dashboard — status cards for MongoDB, Field Guide API, version, and registered services](docs/screenshots/dashboard.png)
+
+**Service catalog** — register and browse services (empty-state shown; onboarding is Ctrl+click away):
+
+![Launchpad service catalog — empty state with Onboard your first service CTA](docs/screenshots/catalog.png)
+
+**Onboard a service** — the register-a-service form, backed by MongoDB:
+
+![Launchpad onboard form — Register a Service](docs/screenshots/onboard-form.png)
+
+**Diagnostics** — in-cluster state via read-only Kubernetes API queries (ServiceAccount RBAC):
+
+![Launchpad diagnostics — platform checks and cluster state showing pods and deployments](docs/screenshots/diagnostics.png)
+
+**Activity feed** — persisted platform events, TTL-bounded in MongoDB:
+
+![Launchpad activity feed — Platform started event](docs/screenshots/feed.png)
+
+Press Ctrl-C in the `port-forward-launchpad` terminal to stop.
+
+## Developer Loop / API Workload (field-guide-api)
+
+The original PRD-1 dogfood app — a Flask field-guide REST API — still builds and deploys with
+its own one-liner:
+
+```
+make cluster-up && make build && make load && make deploy
+```
 
 ```bash
 make test          # run pytest (32 tests, 100% coverage) inside an auto-managed venv
@@ -90,10 +154,6 @@ make load          # push the updated image to the local registry
 make deploy        # helm upgrade --install (idempotent; waits for pods to be Ready)
 make smoke         # confirm the live stack returns 200 on all three endpoints
 ```
-
-Run `make help` (or bare `make`) for the full target listing with one-line descriptions.
-
-## Demo Flow
 
 Start a port-forward to reach the ClusterIP service on localhost:
 
@@ -104,8 +164,8 @@ kubectl port-forward svc/field-guide-api 8080:80
 Then in a second terminal, hit all three endpoints:
 
 ```bash
-curl http://localhost:8080/health
-# {"status":"ok","mongo":"up"}
+curl -s http://localhost:8080/health
+# {"status": "ok", "mongo": "up"}
 
 curl http://localhost:8080/entries
 # []
@@ -122,17 +182,12 @@ curl http://localhost:8080/metrics
 
 Press Ctrl-C in the port-forward terminal to stop.
 
-**Screenshots (planned):**
-- [ ] Platform dashboard showing registered repos (PRD-3)
-- [ ] Grafana dashboard with request-rate + error-rate panels (PRD-4)
-- [ ] ArgoCD app health view with synced Helm release (PRD-2)
-
 ## Repository Layout
 
 | Directory | Purpose |
 |-----------|---------|
-| `apps/` | Application source code (e.g. `apps/field-guide-api/`) |
-| `charts/` | Helm charts for each application (e.g. `charts/field-guide-api/`) |
+| `apps/` | Application source code (e.g. `apps/field-guide-api/`, `apps/launchpad/`) |
+| `charts/` | Helm charts for each application (e.g. `charts/field-guide-api/`, `charts/launchpad/`) |
 | `infra/kind/` | kind cluster configuration and local registry setup |
 | `infra/argocd/` | PRD-2 GitOps seam — ArgoCD manifests (empty this milestone) |
 | `infra/observability/` | PRD-4 observability seam — Prometheus/Grafana/Loki (empty this milestone) |
