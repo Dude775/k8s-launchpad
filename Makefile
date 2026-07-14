@@ -22,6 +22,11 @@ LP_CHART   ?= charts/launchpad
 # Phase 1: test | Phase 2: cluster-up, cluster-down | Phase 3: build, load, deploy, undeploy | Phase 4: help, up, check-tools, port-forward, smoke, clean, clean-venv, reset-local | Phase 5: test-launchpad, build-launchpad, load-launchpad, deploy-launchpad, port-forward-launchpad, smoke-launchpad | Phase 10: up-all, smoke-all, undeploy-launchpad, verify-ttl
 .PHONY: test cluster-up cluster-down build load deploy undeploy help up check-tools port-forward smoke clean clean-venv reset-local test-launchpad build-launchpad load-launchpad deploy-launchpad port-forward-launchpad smoke-launchpad up-all smoke-all undeploy-launchpad verify-ttl
 
+# Aggregate targets (up, up-all, smoke-all) rely on serial left-to-right prerequisite
+# order (cluster before build/load/deploy). Under `make -j` that order breaks — force
+# serial execution; this Makefile has no parallelism worth keeping.
+.NOTPARALLEL:
+
 .DEFAULT_GOAL := help
 
 help: ## print this help message (default goal)
