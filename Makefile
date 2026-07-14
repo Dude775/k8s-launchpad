@@ -153,7 +153,13 @@ check-tools: ## verify required tools are on PATH and print versions
 	PASS=1; \
 	for tool in docker kind helm kubectl bash; do \
 	  if command -v $$tool >/dev/null 2>&1; then \
-	    echo "  ok  $$tool  ($$($$tool --version 2>&1 | head -1))"; \
+	    case $$tool in \
+	      helm)    VER=$$(helm version --short 2>&1 | head -1) ;; \
+	      kubectl) VER=$$(kubectl version --client 2>&1 | head -1) ;; \
+	      kind)    VER=$$(kind version 2>&1 | head -1) ;; \
+	      *)       VER=$$($$tool --version 2>&1 | head -1) ;; \
+	    esac; \
+	    echo "  ok  $$tool  ($$VER)"; \
 	  else \
 	    echo "  MISSING  $$tool"; \
 	    PASS=0; \
