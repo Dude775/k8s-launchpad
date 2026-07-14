@@ -64,7 +64,11 @@ port-forward-launchpad: ## forward svc/launchpad to localhost:8081 (Ctrl-C to st
 
 smoke-launchpad: ## background port-forward, curl /, /health, /api/status, PASS/FAIL, cleanup
 	@echo "==> Starting launchpad smoke test..."; \
-	pkill -f "kubectl port-forward svc/$(LP_RELEASE)" 2>/dev/null || true; \
+	if command -v pkill >/dev/null 2>&1; then \
+	  pkill -f "kubectl port-forward svc/$(LP_RELEASE)" 2>/dev/null || true; \
+	else \
+	  echo "  note: pkill not found (stock Git Bash) — skipping stale port-forward cleanup; if 8081 is busy see docs/troubleshooting.md"; \
+	fi; \
 	kubectl port-forward svc/$(LP_RELEASE) 8081:80 &>/dev/null & \
 	PF_PID=$$!; \
 	trap "kill $$PF_PID 2>/dev/null || true" EXIT; \
@@ -173,7 +177,11 @@ port-forward: ## forward svc/field-guide-api to localhost:8080 (Ctrl-C to stop)
 
 smoke: ## background port-forward, curl /health + /entries + /metrics, PASS/FAIL, cleanup
 	@echo "==> Starting smoke test..."; \
-	pkill -f "kubectl port-forward svc/$(RELEASE)" 2>/dev/null || true; \
+	if command -v pkill >/dev/null 2>&1; then \
+	  pkill -f "kubectl port-forward svc/$(RELEASE)" 2>/dev/null || true; \
+	else \
+	  echo "  note: pkill not found (stock Git Bash) — skipping stale port-forward cleanup; if 8080 is busy see docs/troubleshooting.md"; \
+	fi; \
 	kubectl port-forward svc/$(RELEASE) 8080:80 &>/dev/null & \
 	PF_PID=$$!; \
 	trap "kill $$PF_PID 2>/dev/null || true" EXIT; \
