@@ -92,8 +92,12 @@ exercise meaningfully. Verification is live-only, via `make verify-ttl`:
 ```
 
 The default mode asserts the `expireAfterSeconds` index exists (deterministic, fast). Run with
-`TTL_DEEP=1` for a real insert-and-wait round-trip that confirms MongoDB's TTL monitor actually
-removes an expired document (slow, ~60-90s). This closes the Phase 9 FEED-03 "verify live" flag.
+`TTL_DEEP=1` for a real insert-and-wait round-trip: it inserts a probe event whose `ts` is
+backdated past the index's actual `expireAfterSeconds` (read live from the index, so it tracks
+any TTL override), then polls until MongoDB's TTL monitor — which runs roughly every 60 seconds —
+deletes the already-expired probe (slow, ~60-90s). This closes the Phase 9 FEED-03 "verify live"
+flag. Because the probe is backdated, it sorts to the bottom of the activity feed and is removed
+on the monitor's next pass even if a run is interrupted.
 
 ## See Also
 

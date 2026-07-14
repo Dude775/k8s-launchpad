@@ -37,8 +37,8 @@ config:
   # empty = disabled; _env_flag in app/config.py treats empty string as False.
   # MUST stay empty (or unset) in containers and Kubernetes deployments.
   flaskDebug: ""
-  # 7-day TTL for the events collection index (app/events.py); smoke overrides to a
-  # short value to verify expiry.
+  # 7-day TTL for the events collection index (app/events.py). Live expiry is verified by
+  # `make verify-ttl TTL_DEEP=1`, which backdates a probe past this TTL — no override needed.
   eventsTtlSeconds: "604800"
 
 # Flask SECRET_KEY — local dev only, never a real credential; override with --set for anything real.

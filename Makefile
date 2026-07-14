@@ -95,7 +95,7 @@ verify-ttl: ## verify the events TTL index exists (default: index check; TTL_DEE
 	if [ "$$TTL_DEEP" = "1" ]; then \
 	  echo "==> TTL_DEEP=1: running live expiry round-trip (slow, ~60-90s)..."; \
 	  kubectl exec $$POD -- mongosh --quiet -u root -p launchpad-dev-password --authenticationDatabase admin launchpad \
-	    --eval 'db.events.insertOne({type: "ttl-deep-probe", service_name: null, ts: new Date()})' >/dev/null; \
+	    --eval 'var ttl = db.events.getIndexes().filter(function(i){ return "expireAfterSeconds" in i; })[0].expireAfterSeconds; db.events.insertOne({type: "ttl-deep-probe", service_name: null, ts: new Date(Date.now() - (ttl + 120) * 1000)})' >/dev/null; \
 	  TTL_OK=0; \
 	  for i in $$(seq 1 18); do \
 	    sleep 5; \
