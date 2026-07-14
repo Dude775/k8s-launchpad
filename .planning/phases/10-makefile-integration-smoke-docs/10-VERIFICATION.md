@@ -1,20 +1,21 @@
 ---
 phase: 10-makefile-integration-smoke-docs
 verified: 2026-07-14T02:50:00Z
-status: human_needed
+status: passed
 score: 16/16 must-haves verified
 overrides_applied: 0
 human_verification:
   - test: "REQUIREMENTS.md checkbox/traceability update for DEP-04, DEP-05, DOCS-01"
     expected: "Checkboxes marked [x] and traceability table rows changed from Pending to Complete now that Phase 10 is done and both SUMMARY.md files declare requirements-completed"
     why_human: "Not a codebase functionality gap — a bookkeeping/tracking artifact update that a human or a follow-up doc commit should apply; verifier cannot silently edit REQUIREMENTS.md on the phase's behalf"
+    resolved: "2026-07-14 — REQUIREMENTS.md synced in commit b59be90 (all 27 checkboxes [x], traceability rows Complete); confirmed during v1.1 milestone audit"
 ---
 
 # Phase 10: Makefile Integration + Smoke + Docs Verification Report
 
 **Phase Goal:** `make up-all` brings both apps up end-to-end in a single command and the dashboard is demoable to a human reviewer via the browser
 **Verified:** 2026-07-14T02:50:00Z
-**Status:** human_needed (all automated must-haves verified; one tracking-doc item needs human/follow-up action — see below)
+**Status:** passed (all automated must-haves verified; the one tracking-doc item — REQUIREMENTS.md sync — was resolved in commit b59be90 during the v1.1 milestone audit)
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
