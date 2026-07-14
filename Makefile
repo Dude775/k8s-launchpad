@@ -34,6 +34,13 @@ help: ## print this help message (default goal)
 	  /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2 } \
 	  /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 
+##@ Cluster
+cluster-up: ## create kind cluster + local registry (idempotent)
+	bash scripts/cluster-setup.sh
+
+cluster-down: ## tear down kind cluster + registry (idempotent)
+	bash scripts/cluster-teardown.sh
+
 ##@ field-guide-api
 test: ## create local venv (idempotent), install dev-deps, run pytest with coverage
 	cd apps/field-guide-api && \
@@ -41,6 +48,48 @@ test: ## create local venv (idempotent), install dev-deps, run pytest with cover
 	VENV_PY=$$([ -x .venv/bin/python ] && echo .venv/bin/python || echo .venv/Scripts/python) && \
 	"$$VENV_PY" -m pip install -q -r requirements-dev.txt && \
 	"$$VENV_PY" -m pytest
+
+build: ## build the field-guide-api Docker image and tag it for the local registry
+	docker build -t $(IMAGE):$(TAG) apps/field-guide-api
+
+load: ## push the built image to the local kind registry (localhost:5001)
+	docker push $(IMAGE):$(TAG)
+
+# IMAGE/TAG are forwarded to the chart so build/load/deploy stay coordinated:
+#   make build TAG=v1.0 && make load TAG=v1.0 && make deploy TAG=v1.0
+deploy: ## install or upgrade the Helm release (idempotent; helm upgrade --install)
+	helm upgrade --install $(RELEASE) $(CHART) \
+		--set image.repository=$(IMAGE) --set image.tag=$(TAG) \
+		--wait --timeout 180s
+
+undeploy: ## remove the Helm release and all chart-owned resources
+	helm uninstall $(RELEASE)
+
+port-forward: ## forward svc/field-guide-api to localhost:8080 (Ctrl-C to stop)
+	kubectl port-forward svc/$(RELEASE) 8080:80
+
+smoke: ## background port-forward, curl /health + /entries + /metrics, PASS/FAIL, cleanup
+	@echo "==> Starting smoke test..."; \
+	if command -v pkill >/dev/null 2>&1; then \
+	  pkill -f "kubectl port-forward svc/$(RELEASE)" 2>/dev/null || true; \
+	else \
+	  echo "  note: pkill not found (stock Git Bash) — skipping stale port-forward cleanup; if 8080 is busy see docs/troubleshooting.md"; \
+	fi; \
+	kubectl port-forward svc/$(RELEASE) 8080:80 &>/dev/null & \
+	PF_PID=$$!; \
+	trap "kill $$PF_PID 2>/dev/null || true" EXIT; \
+	sleep 3; \
+	STATUS=0; \
+	for endpoint in health entries metrics; do \
+	  CODE=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/$$endpoint); \
+	  if [ "$$CODE" = "200" ]; then \
+	    echo "  PASS  /$$endpoint → $$CODE"; \
+	  else \
+	    echo "  FAIL  /$$endpoint → $$CODE"; \
+	    STATUS=1; \
+	  fi; \
+	done; \
+	if [ $$STATUS -eq 0 ]; then echo "==> smoke PASSED"; else echo "==> smoke FAILED"; exit 1; fi
 
 ##@ launchpad
 # ─── launchpad targets (Phase 5, filled in Phase 8/10) ────────────────────────
@@ -123,30 +172,7 @@ verify-ttl: ## verify the events TTL index exists (default: index check; TTL_DEE
 	  fi; \
 	fi
 
-##@ Cluster
-cluster-up: ## create kind cluster + local registry (idempotent)
-	bash scripts/cluster-setup.sh
-
-cluster-down: ## tear down kind cluster + registry (idempotent)
-	bash scripts/cluster-teardown.sh
-
-##@ field-guide-api
-build: ## build the field-guide-api Docker image and tag it for the local registry
-	docker build -t $(IMAGE):$(TAG) apps/field-guide-api
-
-load: ## push the built image to the local kind registry (localhost:5001)
-	docker push $(IMAGE):$(TAG)
-
-# IMAGE/TAG are forwarded to the chart so build/load/deploy stay coordinated:
-#   make build TAG=v1.0 && make load TAG=v1.0 && make deploy TAG=v1.0
-deploy: ## install or upgrade the Helm release (idempotent; helm upgrade --install)
-	helm upgrade --install $(RELEASE) $(CHART) \
-		--set image.repository=$(IMAGE) --set image.tag=$(TAG) \
-		--wait --timeout 180s
-
-undeploy: ## remove the Helm release and all chart-owned resources
-	helm uninstall $(RELEASE)
-
+##@ Stack
 up: cluster-up build load deploy  ## bring up the full local stack (cluster-up → build → load → deploy)
 
 up-all: up build-launchpad load-launchpad deploy-launchpad  ## bring up cluster + BOTH apps (up, then launchpad build/load/deploy)
@@ -176,32 +202,6 @@ check-tools: ## verify required tools are on PATH and print versions
 	done; \
 	if [ $$PASS -eq 0 ]; then echo "==> check-tools FAILED — install missing tools"; exit 1; fi; \
 	echo "==> check-tools PASSED"
-
-port-forward: ## forward svc/field-guide-api to localhost:8080 (Ctrl-C to stop)
-	kubectl port-forward svc/$(RELEASE) 8080:80
-
-smoke: ## background port-forward, curl /health + /entries + /metrics, PASS/FAIL, cleanup
-	@echo "==> Starting smoke test..."; \
-	if command -v pkill >/dev/null 2>&1; then \
-	  pkill -f "kubectl port-forward svc/$(RELEASE)" 2>/dev/null || true; \
-	else \
-	  echo "  note: pkill not found (stock Git Bash) — skipping stale port-forward cleanup; if 8080 is busy see docs/troubleshooting.md"; \
-	fi; \
-	kubectl port-forward svc/$(RELEASE) 8080:80 &>/dev/null & \
-	PF_PID=$$!; \
-	trap "kill $$PF_PID 2>/dev/null || true" EXIT; \
-	sleep 3; \
-	STATUS=0; \
-	for endpoint in health entries metrics; do \
-	  CODE=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/$$endpoint); \
-	  if [ "$$CODE" = "200" ]; then \
-	    echo "  PASS  /$$endpoint → $$CODE"; \
-	  else \
-	    echo "  FAIL  /$$endpoint → $$CODE"; \
-	    STATUS=1; \
-	  fi; \
-	done; \
-	if [ $$STATUS -eq 0 ]; then echo "==> smoke PASSED"; else echo "==> smoke FAILED"; exit 1; fi
 
 ##@ Housekeeping
 clean: ## remove local caches, coverage, and temp artifacts (SAFE — no cluster/image/venv changes)

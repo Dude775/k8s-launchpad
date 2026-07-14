@@ -111,7 +111,7 @@ Expected `make smoke-all` output:
 ```
 
 Run `make help` (or bare `make`) for the full target listing with one-line descriptions,
-grouped by Cluster / field-guide-api / launchpad / Housekeeping.
+grouped by Cluster / field-guide-api / launchpad / Stack / Housekeeping.
 
 ## Demo Flow — Launchpad Dashboard
 
