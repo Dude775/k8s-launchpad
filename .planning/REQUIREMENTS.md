@@ -29,11 +29,11 @@ Requirements for milestone v1.1 (PRD-3 Product Dashboard). Each maps to a roadma
 
 ### Service Catalog
 
-- [ ] **CAT-01**: Developer can view a service catalog listing services registered in MongoDB
-- [ ] **CAT-02**: Developer can onboard a new service through a form; the registration persists in MongoDB
-- [ ] **CAT-03**: The onboard form validates input server-side (CSRF-protected) and re-renders with field-level errors on invalid input
-- [ ] **CAT-04**: Developer can open a service detail page showing the full registration and that service's related events
-- [ ] **CAT-05**: Developer can deregister (delete) a service from the catalog after a confirmation step
+- [x] **CAT-01**: Developer can view a service catalog listing services registered in MongoDB
+- [x] **CAT-02**: Developer can onboard a new service through a form; the registration persists in MongoDB
+- [x] **CAT-03**: The onboard form validates input server-side (CSRF-protected) and re-renders with field-level errors on invalid input
+- [x] **CAT-04**: Developer can open a service detail page showing the full registration and that service's related events
+- [x] **CAT-05**: Developer can deregister (delete) a service from the catalog after a confirmation step
 
 ### Diagnostics
 
@@ -42,15 +42,15 @@ Requirements for milestone v1.1 (PRD-3 Product Dashboard). Each maps to a roadma
 
 ### Activity Feed
 
-- [ ] **FEED-01**: Developer sees an activity/events feed of recent platform events (newest first), backed by a persisted MongoDB collection
-- [ ] **FEED-02**: Platform actions — platform started, service registered, service deregistered — write events into the feed
-- [ ] **FEED-03**: The events collection is bounded by a TTL index so it cannot grow unbounded during extended demo use
+- [x] **FEED-01**: Developer sees an activity/events feed of recent platform events (newest first), backed by a persisted MongoDB collection
+- [x] **FEED-02**: Platform actions — platform started, service registered, service deregistered — write events into the feed
+- [x] **FEED-03**: The events collection is bounded by a TTL index so it cannot grow unbounded during extended demo use
 
 ### Deployment
 
 - [x] **DEP-01**: `charts/launchpad/` Helm chart deploys the dashboard (Deployment, Service, ConfigMap, Secret, values.yaml); `helm lint` passes and its `_helpers.tpl` naming does not collide with field-guide-api selectors
 - [x] **DEP-02**: The chart provisions a ServiceAccount + namespace-scoped Role + RoleBinding granting read-only access to pods/deployments, with `serviceAccountName` wired into the Deployment spec
-- [ ] **DEP-03**: Launchpad runs its own in-cluster MongoDB (own database) via `mongo:7` manifests embedded in its chart; the field-guide-api chart is left untouched
+- [x] **DEP-03**: Launchpad runs its own in-cluster MongoDB (own database) via `mongo:7` manifests embedded in its chart; the field-guide-api chart is left untouched
 - [x] **DEP-04**: The Makefile has namespaced launchpad targets (`build-launchpad`, `load-launchpad`, `deploy-launchpad`, `port-forward-launchpad`, `smoke-launchpad`, `test-launchpad`) using `LP_` variables that do not collide with the field-guide-api targets, and launchpad port-forwards on a distinct local port
 - [x] **DEP-05**: `make up-all` brings up the cluster and both apps end-to-end, and `make smoke-launchpad` verifies the dashboard reachable (200 on `/`, `/health`, `/api/status`)
 
@@ -113,19 +113,19 @@ Which phases cover which requirements. Phase assignments populated during roadma
 | STAT-02 | Phase 7 | Complete |
 | STAT-03 | Phase 7 | Complete |
 | STAT-04 | Phase 7 | Complete |
-| CAT-01 | Phase 9 | Pending |
-| CAT-02 | Phase 9 | Pending |
-| CAT-03 | Phase 9 | Pending |
-| CAT-04 | Phase 9 | Pending |
-| CAT-05 | Phase 9 | Pending |
+| CAT-01 | Phase 9 | Complete |
+| CAT-02 | Phase 9 | Complete |
+| CAT-03 | Phase 9 | Complete |
+| CAT-04 | Phase 9 | Complete |
+| CAT-05 | Phase 9 | Complete |
 | DIAG-01 | Phase 8 | Complete |
 | DIAG-02 | Phase 8 | Complete |
-| FEED-01 | Phase 9 | Pending |
-| FEED-02 | Phase 9 | Pending |
-| FEED-03 | Phase 9 | Pending |
+| FEED-01 | Phase 9 | Complete |
+| FEED-02 | Phase 9 | Complete |
+| FEED-03 | Phase 9 | Complete |
 | DEP-01 | Phase 8 | Complete |
 | DEP-02 | Phase 8 | Complete |
-| DEP-03 | Phase 9 | Pending |
+| DEP-03 | Phase 9 | Complete |
 | DEP-04 | Phase 10 | Complete |
 | DEP-05 | Phase 10 | Complete |
 | DOCS-01 | Phase 10 | Complete |
