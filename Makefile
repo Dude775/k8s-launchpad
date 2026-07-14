@@ -88,18 +88,21 @@ verify-ttl: ## verify the events TTL index exists (default: index check; TTL_DEE
 	@echo "==> Verifying events TTL index..."; \
 	POD=$$(kubectl get pods -l app.kubernetes.io/name=launchpad-mongodb -o jsonpath='{.items[0].metadata.name}' 2>/dev/null); \
 	if [ -z "$$POD" ]; then echo "  FAIL  launchpad mongodb pod not found"; exit 1; fi; \
-	kubectl exec $$POD -- mongosh --quiet -u root -p launchpad-dev-password --authenticationDatabase admin launchpad \
+	MONGO_USER=$$(kubectl get secret $(LP_RELEASE)-mongodb -o jsonpath='{.data.MONGO_INITDB_ROOT_USERNAME}' 2>/dev/null | base64 -d); \
+	MONGO_PASS=$$(kubectl get secret $(LP_RELEASE)-mongodb -o jsonpath='{.data.MONGO_INITDB_ROOT_PASSWORD}' 2>/dev/null | base64 -d); \
+	if [ -z "$$MONGO_USER" ] || [ -z "$$MONGO_PASS" ]; then echo "  FAIL  could not read credentials from secret $(LP_RELEASE)-mongodb"; exit 1; fi; \
+	kubectl exec $$POD -- mongosh --quiet -u "$$MONGO_USER" -p "$$MONGO_PASS" --authenticationDatabase admin launchpad \
 	  --eval 'JSON.stringify(db.events.getIndexes())' | grep -q expireAfterSeconds \
 	  && echo "  PASS  events.ts TTL index present" \
 	  || { echo "  FAIL  no TTL index on events.ts"; exit 1; }; \
 	if [ "$$TTL_DEEP" = "1" ]; then \
 	  echo "==> TTL_DEEP=1: running live expiry round-trip (slow, ~60-90s)..."; \
-	  kubectl exec $$POD -- mongosh --quiet -u root -p launchpad-dev-password --authenticationDatabase admin launchpad \
+	  kubectl exec $$POD -- mongosh --quiet -u "$$MONGO_USER" -p "$$MONGO_PASS" --authenticationDatabase admin launchpad \
 	    --eval 'var ttl = db.events.getIndexes().filter(function(i){ return "expireAfterSeconds" in i; })[0].expireAfterSeconds; db.events.insertOne({type: "ttl-deep-probe", service_name: null, ts: new Date(Date.now() - (ttl + 120) * 1000)})' >/dev/null; \
 	  TTL_OK=0; \
 	  for i in $$(seq 1 18); do \
 	    sleep 5; \
-	    COUNT=$$(kubectl exec $$POD -- mongosh --quiet -u root -p launchpad-dev-password --authenticationDatabase admin launchpad \
+	    COUNT=$$(kubectl exec $$POD -- mongosh --quiet -u "$$MONGO_USER" -p "$$MONGO_PASS" --authenticationDatabase admin launchpad \
 	      --eval 'db.events.countDocuments({type: "ttl-deep-probe"})' 2>/dev/null | tail -1); \
 	    if [ "$$COUNT" = "0" ]; then TTL_OK=1; break; fi; \
 	  done; \
