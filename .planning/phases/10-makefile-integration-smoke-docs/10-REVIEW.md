@@ -14,6 +14,12 @@ findings:
   info: 4
   total: 10
 status: issues_found
+fixes:
+  fixed_at: 2026-07-14
+  scope: critical_warning
+  fixed: 6
+  skipped: 0
+  open_info: 4
 ---
 
 # Phase 10: Code Review Report
@@ -48,6 +54,8 @@ were verified false on the primary supported shell.
 
 ### CR-01: `verify-ttl TTL_DEEP=1` can never pass against a default deployment — probe is inserted with `ts: new Date()` but the TTL is 7 days
 
+**Status:** FIXED — commit `eb0ecdd`. Probe `ts` is now backdated past the index's live `expireAfterSeconds` (+120s); `make verify-ttl TTL_DEEP=1` verified PASSING twice against the live cluster, probe auto-removed by the TTL monitor (count 0 after run). `docs/known-limitations.md` rewritten to describe the backdated-probe mechanism; stale `values.yaml:40-41` "smoke overrides" comment corrected.
+
 **File:** `Makefile:95-112` (probe insert at `Makefile:97-98`)
 **Issue:** The deep mode inserts a probe with `ts: new Date()` (now) and polls for its
 deletion for at most 90 seconds (`for i in $$(seq 1 18); do sleep 5;`). MongoDB's TTL
@@ -76,6 +84,8 @@ tests the real production index.
 
 ### WR-01: MongoDB root password hardcoded three times in `verify-ttl` — breaks the documented password-override path
 
+**Status:** FIXED — commit `ffc104e`. Credentials now read once from the in-cluster Secret (`kubectl get secret $(LP_RELEASE)-mongodb` + `base64 -d`) with a fail-fast check, referenced via `$$MONGO_USER`/`$$MONGO_PASS` in all three exec calls; zero occurrences of the literal password remain in the Makefile. Verified live (default and TTL_DEEP modes).
+
 **File:** `Makefile:91, 97, 102`
 **Issue:** `-u root -p launchpad-dev-password` is inlined in all three `kubectl exec`
 invocations. `docs/known-limitations.md:44-46` explicitly instructs users to override the
@@ -93,6 +103,8 @@ or `LP_MONGO_USER ?= root` / `LP_MONGO_PASSWORD ?= launchpad-dev-password` at th
 the Makefile and reference `$(LP_MONGO_PASSWORD)` in the recipe.
 
 ### WR-02: `check-tools` prints error strings instead of versions for helm and kubectl
+
+**Status:** FIXED — commit `60a1f44`. Per-tool `case` dispatch (`helm version --short`, `kubectl version --client`, `kind version`, `--version` for the rest); verified live — all five tools print clean version strings.
 
 **File:** `Makefile:153`
 **Issue:** The loop runs `$$tool --version` for every tool, but helm and kubectl do not
@@ -119,6 +131,8 @@ for tool in docker kind helm kubectl bash; do \
 
 ### WR-03: `pkill` does not exist in Git Bash — the stale-port-forward guard is a silent no-op on the primary supported shell
 
+**Status:** FIXED — commit `ed8653b`. Both smoke targets now gate on `command -v pkill` and print an explicit note (pointing at docs/troubleshooting.md) when absent; troubleshooting row for :8080 gained the `netstat -ano`/`taskkill //PID` fallback and both rows now state the guard runs automatically only where `pkill` exists (WSL2). Verified live via `make smoke-all` on Git Bash (note printed, all endpoints PASS).
+
 **File:** `Makefile:67, 167`; `docs/troubleshooting.md:15, 19`
 **Issue:** README:75 declares Git Bash the primary supported shell, but Git for Windows
 ships no `pkill` (verified on this host: `command -v pkill` → not found, `uname` →
@@ -137,6 +151,8 @@ soften the "does this automatically" claim to note it requires `pkill` (WSL2) an
 no-op in stock Git Bash.
 
 ### WR-04: `up`, `up-all`, and `smoke-all` encode strict ordering via prerequisite lists — broken under `make -j`
+
+**Status:** FIXED — commit `3d62c08`. `.NOTPARALLEL:` added near the top with an explanatory comment; `make -j4 -n up-all` verified working.
 
 **File:** `Makefile:138, 140, 146`
 **Issue:** `up-all: up build-launchpad load-launchpad deploy-launchpad` relies on Make's
@@ -159,6 +175,8 @@ up-all:
 
 ### WR-05: Duplicate `##@ field-guide-api` section — help output prints the header twice and README's claimed grouping doesn't match
 
+**Status:** FIXED — commit `1bc51a7`. Target blocks reordered into Cluster / field-guide-api / launchpad / Stack / Housekeeping (recipes byte-identical — sorted-diff against HEAD showed only the duplicate header removed and `##@ Stack` added); `up`/`up-all`/`smoke-all`/`check-tools` now live under `##@ Stack`; README:114 updated to match the real `make help` output (verified live).
+
 **File:** `Makefile:32, 121`; `README.md:113-114`
 **Issue:** `##@ field-guide-api` appears at both line 32 (above `test`) and line 121
 (above `build`/`load`/`deploy`/`undeploy`/`up`/`up-all`/`smoke-all`/`check-tools`/
@@ -173,6 +191,8 @@ and move `up`, `up-all`, `smoke-all`, `check-tools` under a new `##@ Stack` (or
 `##@ Aggregate`) section. Update README:114 to match the final grouping.
 
 ## Info
+
+> Fix scope was Critical + Warning only — IN-01 through IN-04 remain OPEN (not addressed).
 
 ### IN-01: `verify-ttl` index check matches any TTL index on `events`, not specifically the `ts` index
 
