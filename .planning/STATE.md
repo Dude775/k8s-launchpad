@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Product Dashboard
-status: Awaiting next milestone
-stopped_at: Milestone v1.1 completed, archived, and tagged — next step /gsd-new-milestone
-last_updated: "2026-07-14T00:51:33.667Z"
-last_activity: 2026-07-14 — Milestone v1.1 completed and archived
+milestone: v2.0
+milestone_name: Observability + Mission Control
+status: planning
+last_updated: "2026-07-15T21:28:42.878Z"
+last_activity: 2026-07-15
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 14
-  completed_plans: 14
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-07-14 after v1.1 milestone)
 
 ## Current Position
 
-Phase: Milestone v1.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-14 — Milestone v1.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-15 — Milestone v2.0 started
 
 ## Performance Metrics
 
