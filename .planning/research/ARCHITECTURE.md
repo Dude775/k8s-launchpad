@@ -1,582 +1,314 @@
 # Architecture Research
 
-**Domain:** Local Kubernetes Internal Developer Platform — v1.1 Product Dashboard (PRD-3)
-**Researched:** 2026-07-08
-**Confidence:** HIGH (derived from live codebase inspection + K8s in-cluster config docs)
-
----
+**Domain:** Self-hosted Kubernetes observability (kube-prometheus-stack) + Flask/htmx "control room" UI reskin, integrated into an existing multi-chart monorepo IDP
+**Researched:** 2026-07-16
+**Confidence:** HIGH (chart/CLI behavior verified against prometheus-community/grafana official docs + GitHub issues; MEDIUM on exact PromQL query shapes, which are a phase-level design detail, not a research blocker)
 
 ## Standard Architecture
 
-### System Overview — v1.1 (two-app state)
+### System Overview
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│                         DEV MACHINE (host)                                  │
-│                                                                              │
-│  make build          make build-launchpad                                   │
-│  docker build        docker build                                            │
-│  apps/field-guide-api/    apps/launchpad/                                   │
-│         │                        │                                           │
-│         └──────────┬─────────────┘                                          │
-│                    ▼                                                          │
-│         docker push localhost:5001/...                                       │
-│                    │                                                          │
-│          ┌─────────▼──────────┐                                             │
-│          │  Local Registry     │  registry:3 @ localhost:5001                │
-│          └─────────┬──────────┘                                             │
-│                    │ Docker network (kind)                                   │
-└────────────────────┼────────────────────────────────────────────────────────┘
-                     │
-        ┌────────────▼────────────────────────────────────────────┐
-        │                  KIND CLUSTER (default namespace)         │
-        │                                                           │
-        │  ┌───────────────────┐    ┌───────────────────────────┐  │
-        │  │  field-guide-api   │    │       launchpad            │  │
-        │  │  pod :8000         │    │       pod :8000            │  │
-        │  │  Flask REST API    │◄───│  HTTP GET /health          │  │
-        │  └────────┬──────────┘    │  (ClusterIP DNS)           │  │
-        │           │ MONGO_URI      └──────────┬────────────────┘  │
-        │           │                           │ MONGO_URI          │
-        │  ┌────────▼──────────┐    ┌──────────▼────────────────┐  │
-        │  │  field-guide-api   │    │  launchpad-mongodb         │  │
-        │  │  -mongodb pod      │    │  pod :27017               │  │
-        │  │  mongo:7           │    │  mongo:7                  │  │
-        │  └───────────────────┘    └───────────────────────────┘  │
-        │                                        │                   │
-        │                           ┌────────────▼────────────────┐ │
-        │                           │  K8s API server              │ │
-        │                           │  https://kubernetes.default  │ │
-        │                           │  ◄── launchpad ServiceAccount│ │
-        │                           │       (read-only RBAC)       │ │
-        │                           └─────────────────────────────┘ │
-        └───────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│ EXISTING (frozen, additive-only)                                          │
+│  ┌───────────────┐        ┌────────────────┐                             │
+│  │ field-guide-api│ <---- │ launchpad        │  (both: default namespace) │
+│  │ Svc:80->8000   │  http │  /api/status     │                             │
+│  │ /metrics       │       │  /partials/*     │                             │
+│  │ labels: name=  │       │  Svc:80->8000    │                             │
+│  │  field-guide-api│      │  /metrics        │                             │
+│  └───────┬────────┘       │  labels: name=   │                             │
+│          │                │   launchpad      │                             │
+│      mongo:7           mongo:7 (own)          │
+└──────────┼────────────────────┼──────────────┼─────────────────────────────┘
+           │ scraped by ServiceMonitor          │ scraped by ServiceMonitor
+           │ (label-selector match, NO          │ (label-selector match, NO
+           │  chart changes required)           │  chart changes required)
+┌──────────▼────────────────────▼──────────────▼─────────────────────────────┐
+│ NEW — infra/observability/ namespace "observability" (Helm: kube-prometheus-│
+│ stack, trimmed)                                                             │
+│  ┌────────────────┐   ┌───────────────────┐   ┌────────────────────────┐  │
+│  │ Prometheus      │   │ Grafana            │   │ kube-state-metrics     │  │
+│  │ Operator +      │──▶│ + sidecar watches  │   │ (cluster object state) │  │
+│  │ Prometheus CR   │   │ ConfigMaps labeled │   └────────────────────────┘  │
+│  │ svc:            │   │ grafana_dashboard=1│                              │
+│  │ prometheus-     │   │ Svc: <rel>-grafana │   (Alertmanager: disabled)   │
+│  │ operated:9090   │   │      :80           │   (node-exporter: disabled)  │
+│  └───────▲─────────┘   └────────────────────┘                              │
+│          │ PromQL HTTP API (/api/v1/query)                                 │
+│  ┌───────┴─────────┐        ┌─────────────────────────┐                    │
+│  │ ServiceMonitor:  │        │ Grafana dashboard        │                   │
+│  │ field-guide-api  │        │ ConfigMaps (JSON,        │                   │
+│  │ ServiceMonitor:  │        │ label grafana_dashboard) │                   │
+│  │ launchpad        │        │ — dashboards-as-code     │                   │
+│  │ (standalone      │        └─────────────────────────┘                    │
+│  │  manifests, NOT  │                                                       │
+│  │  in app charts)  │                                                       │
+│  └──────────────────┘                                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+           ▲
+           │ requests.get(PROMETHEUS_BASE_URL + /api/v1/query, timeout=2s)
+┌──────────┴───────────────────────────────────────────────────────────────┐
+│ launchpad app/ (NEW module, additive)                                     │
+│  app/prometheus.py — thin PromQL client, never-raises, mirrors            │
+│    app/status.py's exception-isolation + 2s timeout discipline            │
+│  app/routes/observability.py (or extend partials_bp) — metric-card        │
+│    fragment endpoint, "Open in Grafana" deep links, NO SIGNAL degradation │
+│  app/templates/mission-control.css layered over pico.min.css + style.css  │
+│    (base.html gains one new <link>, third cascade layer)                  │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Component Responsibilities
 
-| Component | Responsibility | Status |
-|-----------|----------------|--------|
-| `apps/field-guide-api/` | Flask REST API for DevOps knowledge entries | v1.0 — UNTOUCHED |
-| `charts/field-guide-api/` | Helm chart: Deployment + Service + ConfigMap + Secret + MongoDB manifests | v1.0 — UNTOUCHED |
-| `apps/launchpad/` | Platform dashboard Flask app: UI shell, status API, service catalog, events feed, K8s diagnostics | NEW in v1.1 |
-| `charts/launchpad/` | Helm chart for launchpad: Deployment + Service + ConfigMap + Secret + MongoDB manifests + RBAC manifests | NEW in v1.1 |
-| `Makefile` | Developer CLI — add LP_ variable block + launchpad-specific targets + `up-all` composite | MODIFIED in v1.1 |
-| `infra/kind/` | Cluster definition + registry bootstrap | v1.0 — UNTOUCHED |
-| `scripts/` | Shell scripts (cluster-setup.sh, cluster-teardown.sh) | v1.0 — UNTOUCHED |
+| Component | Responsibility | Typical Implementation |
+|-----------|-----------------|-------------------------|
+| kube-prometheus-stack (trimmed) | Runs Prometheus Operator, a `Prometheus` CR, Grafana, kube-state-metrics; owns CRDs (`ServiceMonitor`, `PodMonitor`) | Helm chart `prometheus-community/kube-prometheus-stack`, installed into its own `observability` namespace, `alertmanager.enabled: false`, `nodeExporter.enabled: false` |
+| ServiceMonitor (field-guide-api) | Tells the Prometheus Operator to scrape the *existing* field-guide-api Service's `/metrics` on its `http` port | Standalone YAML in `infra/observability/`, `spec.selector.matchLabels` = the Service's existing `app.kubernetes.io/name: field-guide-api` label — zero chart edits |
+| ServiceMonitor (launchpad) | Same, for launchpad's `/metrics` | Standalone YAML in `infra/observability/`, matches `app.kubernetes.io/name: launchpad` |
+| Grafana dashboard ConfigMaps | Provision uptime/latency/error-rate dashboards as code, re-created on every fresh cluster | ConfigMaps in `infra/observability/dashboards/`, each with label `grafana_dashboard: "1"`, one dashboard JSON per ConfigMap (Grafana sidecar recommendation — one dashboard per ConfigMap avoids known sidecar merge bugs) |
+| `app/prometheus.py` (new) | Query the Prometheus HTTP API for the metric cards; never raise; degrade to "NO SIGNAL" on any failure | Thin wrapper around `requests.get(f"{PROMETHEUS_BASE_URL}/api/v1/query", params={"query": ...}, timeout=2)`, same shape as `app/status.py`'s `field_guide_reachable` check |
+| New launchpad route/blueprint | Serve a metric-cards hypermedia fragment + "Open in Grafana" links | Extends the existing partial-fragment pattern (`app/routes/partials.py`, `app/templates/partials/status_cards.html`) rather than inventing a new polling mechanism |
+| `mission-control.css` (new) | Visual reskin layer; hero card, metric-card styling, dimmed/disabled states | Third stylesheet loaded in `base.html` after `pico.min.css` and `style.css`, same override-cascade convention already established |
+| Makefile: `observability-up/down`, `port-forward-grafana`, `seed-demo`, `up-mission-control` | Additive automation wrapping the above | New `.PHONY` targets appended to the existing Makefile; **zero edits to existing targets or their bodies** |
 
----
-
-## Repository Tree: New vs Modified vs Untouched
+## Recommended Project Structure
 
 ```
-k8s-launchpad/
-├── apps/
-│   ├── field-guide-api/       ← UNTOUCHED (zero changes)
-│   └── launchpad/             ← NEW
-│       ├── Dockerfile
-│       ├── requirements.txt
-│       ├── requirements-dev.txt
-│       ├── pytest.ini
-│       ├── .env.example
-│       ├── .dockerignore
-│       ├── wsgi.py
-│       ├── app/
-│       │   ├── __init__.py    # create_app factory (same pattern as field-guide-api)
-│       │   ├── config.py      # Config: MONGO_URI, FIELD_GUIDE_URL, K8S_NAMESPACE
-│       │   ├── extensions.py  # mongo (Flask-PyMongo)
-│       │   ├── k8s.py         # K8s client init: in-cluster → kubeconfig → None
-│       │   └── routes/
-│       │       ├── __init__.py
-│       │       ├── ui.py      # Jinja2 routes: GET /, /services, /diagnostics
-│       │       ├── status.py  # GET /health, GET /api/status
-│       │       ├── services.py # GET/POST/DELETE /api/services
-│       │       └── events.py  # GET /api/events, POST /api/events
-│       ├── app/static/        # vendored htmx.min.js, CSS
-│       ├── app/templates/     # Jinja2 HTML: base.html, index.html, services.html, ...
-│       └── tests/
-│           └── conftest.py    # create_app fixture, mock K8s client, mock requests
-│
-├── charts/
-│   ├── field-guide-api/       ← UNTOUCHED (zero changes — critical constraint)
-│   └── launchpad/             ← NEW
-│       ├── Chart.yaml
-│       ├── values.yaml
-│       └── templates/
-│           ├── _helpers.tpl   # launchpad.fullname, launchpad.mongodb.fullname, etc.
-│           ├── deployment.yaml
-│           ├── service.yaml
-│           ├── configmap.yaml
-│           ├── secret.yaml    # MONGO_URI only (same pattern as field-guide-api)
-│           ├── NOTES.txt
-│           ├── rbac/          ← NEW (no equivalent in field-guide-api chart)
-│           │   ├── serviceaccount.yaml
-│           │   ├── role.yaml
-│           │   └── rolebinding.yaml
-│           └── mongodb/       # same pattern as charts/field-guide-api/templates/mongodb/
-│               ├── deployment.yaml
-│               ├── service.yaml
-│               ├── pvc.yaml
-│               └── secret.yaml
-│
-├── infra/                     ← UNTOUCHED
-├── scripts/                   ← UNTOUCHED
-├── Makefile                   ← MODIFIED (LP_ variable block + 6 new targets)
-└── README.md                  ← MODIFIED (dashboard demo flow + screenshot placeholders)
+infra/
+├── observability/
+│   ├── kube-prometheus-stack-values.yaml   # trimmed values (alertmanager/nodeExporter disabled)
+│   ├── servicemonitor-field-guide-api.yaml # standalone CRD manifest, targets existing Service by label
+│   ├── servicemonitor-launchpad.yaml       # standalone CRD manifest, targets existing Service by label
+│   └── dashboards/
+│       ├── uptime-dashboard-configmap.yaml     # label: grafana_dashboard: "1"
+│       ├── latency-dashboard-configmap.yaml
+│       └── error-rate-dashboard-configmap.yaml
+scripts/
+├── observability-up.sh     # helm repo add/update, helm upgrade --install --create-namespace -n observability, kubectl apply -f infra/observability/*.yaml, wait for rollout
+├── observability-down.sh   # helm uninstall + kubectl delete namespace observability (idempotent, mirrors cluster-teardown.sh style)
+└── seed-demo.sh            # idempotent curl/POST sequence against launchpad's EXISTING /catalog/new and any other write endpoints
+apps/launchpad/app/
+├── prometheus.py            # NEW — bare helper module, mirrors k8s.py/status.py shape
+├── routes/
+│   └── observability.py     # NEW blueprint (or extend partials.py) — metric-card fragment + Grafana deep-link builder
+├── static/
+│   └── mission-control.css  # NEW — third cascade layer
+└── templates/
+    ├── base.html            # ONE new <link> line added (additive asset reference only)
+    ├── index.html           # hero "All Systems Online" + metric cards section added
+    └── partials/
+        └── metric_cards.html # NEW partial, follows status_cards.html's fragment/full-page pattern
 ```
 
----
+### Structure Rationale
 
-## Architectural Patterns for v1.1
+- **`infra/observability/` as flat standalone manifests, not a chart:** The milestone's hard constraint is zero modification to `charts/field-guide-api` and `charts/launchpad`. Putting ServiceMonitors inside either app chart would work functionally but violates the additive-only boundary; keeping them as plain YAML applied via `kubectl apply -f` (or a tiny umbrella chart if templating helps later) keeps the seam self-contained and reviewable independent of the app charts.
+- **Dashboards as one ConfigMap per JSON file:** the Grafana sidecar has documented issues merging multiple dashboards bundled in a single ConfigMap; one file per ConfigMap is the safe, recommended pattern.
+- **`app/prometheus.py` as a bare module (no Blueprint):** mirrors the two precedents already in this codebase — `app/k8s.py` (lazy, returns `None` sentinel on failure, no caching) and the `field_guide_reachable` block inside `app/status.py` (mandatory timeout, exception-isolated, discards exception detail). A new PromQL client should not invent a third style.
+- **Reuse the hypermedia fragment pattern for metric cards, not a new mechanism:** `app/routes/partials.py` + `app/templates/partials/status_cards.html` already establish "poll a fragment endpoint with htmx, render full-page too when not `HX-Request`." The metric cards should be a sibling partial, not a parallel polling scheme.
 
-### Pattern 1: Separate MongoDB per Chart (Ownership Decision)
+## Architectural Patterns
 
-**What:** Each Helm chart embeds its own MongoDB manifests and owns its own PVC. The launchpad chart deploys a second `mongo:7` pod using the same `templates/mongodb/` subdirectory pattern established in `charts/field-guide-api/`.
+### Pattern 1: Out-of-chart ServiceMonitor targeting existing Services by label
 
-**Decision rationale — why not a shared MongoDB instance:**
+**What:** A `ServiceMonitor` CRD is a separate Kubernetes object from the `Service` it targets. The Prometheus Operator reconciles `spec.selector.matchLabels` against `Service.metadata.labels` (not the app chart) to find scrape targets. Both existing charts already stamp `app.kubernetes.io/name` / `app.kubernetes.io/instance` onto their Services via the shared `*.labels` Helm helper — this is already sufficient; **no chart edits are needed** to make either Service scrapable.
 
-| Option | What changes | Why rejected |
-|--------|-------------|-------------|
-| Shared MongoDB (third Helm release) | field-guide-api chart must be modified to `mongodb.enabled=false` + `externalMongoUri=...`; new `charts/mongodb/` release; Makefile deploy ordering becomes three-step with explicit dependency | Breaks the clean v1.0 chart; adds a deploy dependency that complicates `make up-all`; field-guide-api's `externalMongoUri` seam exists for this but using it means the working v1.0 chart is modified |
-| Separate MongoDB per chart (CHOSEN) | launchpad gets its own `mongo:7` pod + PVC; databases are `fieldguide` (field-guide-api) and `launchpad` (launchpad); no cross-chart dependency | field-guide-api chart is zero-touch; each chart is independently installable/uninstallable; two pods is acceptable on a local kind cluster |
+**When to use:** Whenever you must add Prometheus scraping to a workload whose chart you are contractually forbidden to touch (this project's exact situation).
 
-**Database layout:**
-- `field-guide-api-mongodb` pod → database `fieldguide` → collections: `entries`
-- `launchpad-mongodb` pod → database `launchpad` → collections: `services`, `events`
+**Trade-offs:** You lose the ability to co-version the ServiceMonitor with the app chart (upgrade/rollback together); acceptable here since these are truly independent lifecycle concerns (observability stack vs. app chart) and the constraint is explicit.
 
-**Helm values pattern (charts/launchpad/values.yaml):**
+**Example (`infra/observability/servicemonitor-launchpad.yaml`):**
 ```yaml
-mongodb:
-  enabled: true
-  image: mongo:7
-  auth:
-    username: root
-    password: launchpad-dev-password   # local kind only; never a real credential
-    database: launchpad
-  persistence:
-    enabled: true
-    size: 1Gi
-    storageClass: ""
-
-config:
-  mongoDbName: launchpad
-  fieldGuideUrl: "http://field-guide-api"  # ClusterIP DNS — same namespace
-  k8sNamespace: "default"
-  flaskDebug: ""
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: launchpad
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack   # required unless serviceMonitorSelectorNilUsesHelmValues=false
+spec:
+  namespaceSelector:
+    matchNames: ["default"]           # where launchpad's Service actually lives
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: launchpad   # already emitted by charts/launchpad/templates/service.yaml
+  endpoints:
+    - port: http        # matches the Service's existing `name: http` port
+      path: /metrics
+      interval: 15s
 ```
 
-The `externalMongoUri` seam in `charts/field-guide-api/values.yaml` remains in place and unused — available for future PRDs where a genuine shared DB is warranted.
+### Pattern 2: Graceful-degradation outbound query (extends an existing convention)
 
-### Pattern 2: Service-to-Service via ClusterIP DNS
+**What:** Every cross-service HTTP call in launchpad already follows one discipline: bounded timeout (2s), narrow exception catch, discard exception detail, return a sentinel (`False` / `0` / empty dict) — never raise past the caller. `app/prometheus.py` must be the third instance of this same pattern (after `app/k8s.py` and the `field_guide_reachable` check in `app/status.py`), not a new design.
 
-**What:** The launchpad app calls the field-guide-api `/health` endpoint to report platform status. Both apps deploy in the `default` namespace, so the field-guide-api ClusterIP Service is reachable at `http://field-guide-api` (short DNS form — no namespace qualification needed within the same namespace).
+**When to use:** Any new call from launchpad to a component that may not be installed (Prometheus/Grafana here) or may be temporarily unreachable.
 
-**In-cluster resolution chain:**
-```
-launchpad pod
-  → HTTP GET http://field-guide-api/health   (short DNS)
-  → kube-dns resolves to field-guide-api ClusterIP (port 80)
-  → field-guide-api pod :8000 /health
-  ← 200 {"status": "ok", ...}
-```
+**Trade-offs:** Silently swallowing errors means operators must rely on Grafana/Prometheus's own health surfaces for real debugging; acceptable because launchpad's UI purpose is "is it there, yes/no/dimmed," not a diagnostics console for Prometheus itself.
 
-**Config injection via ConfigMap:**
-```yaml
-# charts/launchpad/templates/configmap.yaml
-FIELD_GUIDE_URL: {{ .Values.config.fieldGuideUrl | quote }}
-# default: "http://field-guide-api"
-```
-
-**App-level graceful degradation (no cluster or field-guide-api down):**
+**Example:**
 ```python
-# apps/launchpad/app/routes/status.py
-import requests
+PROMETHEUS_TIMEOUT_SECONDS = 2
 
-FIELD_GUIDE_URL = os.environ.get("FIELD_GUIDE_URL", "http://localhost:8080")
-
-def check_field_guide_health():
+def query_instant(promql: str) -> dict | None:
+    base_url = current_app.config["PROMETHEUS_BASE_URL"]
     try:
-        r = requests.get(f"{FIELD_GUIDE_URL}/health", timeout=2)
-        return {"status": "ok", "code": r.status_code}
+        resp = requests.get(
+            f"{base_url}/api/v1/query",
+            params={"query": promql},
+            timeout=PROMETHEUS_TIMEOUT_SECONDS,
+        )
+        resp.raise_for_status()
+        return resp.json()
     except requests.exceptions.RequestException:
-        return {"status": "unreachable"}
+        return None  # caller renders a dimmed "NO SIGNAL" card
 ```
 
-For local dev/tests: set `FIELD_GUIDE_URL=http://localhost:8080` in `.env`; if no port-forward is active, the check returns `"unreachable"` — UI shows degraded card, app does not crash.
+### Pattern 3: Stylesheet cascade layering (already established, extend don't replace)
 
-**Test isolation:** Mock `requests.get` in pytest via `monkeypatch` or `unittest.mock.patch`. Never hit a real network in unit tests.
+**What:** `style.css` already documents itself as "loaded AFTER pico.min.css so these overrides win the cascade." `mission-control.css` is a third layer with the same contract: loaded after both, only adds new selectors/hero/metric-card rules, never edits `style.css` or `pico.min.css`.
 
-### Pattern 3: K8s API Access — In-Cluster Config with Kubeconfig Fallback
+**When to use:** Any future visual layer in this codebase — this is now a two-layer-turned-three-layer convention, not a one-off.
 
-**What:** The launchpad diagnostics section queries the K8s API for pod and Deployment status in the `default` namespace. The `kubernetes` Python client supports two config loading strategies; the app tries both in order.
-
-**Loading strategy (apps/launchpad/app/k8s.py):**
-```python
-from kubernetes import client, config
-from kubernetes.config import ConfigException
-
-def init_k8s_client():
-    """Returns (CoreV1Api, AppsV1Api) tuple or (None, None) on failure."""
-    try:
-        config.load_incluster_config()        # pod: mounted SA token
-    except ConfigException:
-        try:
-            config.load_kube_config()         # local dev: ~/.kube/config
-        except ConfigException:
-            return None, None                 # no config — degrade gracefully
-    return client.CoreV1Api(), client.AppsV1Api()
-```
-
-**In-cluster mechanics:** When the pod runs with a ServiceAccount that has the RBAC role, Kubernetes mounts the token at `/var/run/secrets/kubernetes.io/serviceaccount/token` and the CA at `.../ca.crt`. `load_incluster_config()` reads these automatically. The pod calls `https://kubernetes.default.svc.cluster.local`.
-
-**Local dev mechanics:** `load_kube_config()` reads `~/.kube/config`, which `make cluster-up` populates via `kind create cluster`. The developer's kubeconfig already points at the kind cluster.
-
-**Graceful degradation:** If `init_k8s_client()` returns `(None, None)`, all K8s-dependent routes return a `{"status": "unavailable", "reason": "no_cluster"}` response. The UI renders a degraded diagnostics card without crashing. This is the correct behavior for unit tests (no kubeconfig in CI) and local dev without a running cluster.
-
-**RBAC manifests (charts/launchpad/templates/rbac/):**
-
-```yaml
-# serviceaccount.yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: {{ include "launchpad.fullname" . }}-sa
-  labels: ...
-
-# role.yaml — namespace-scoped (Role, not ClusterRole)
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ include "launchpad.fullname" . }}-reader
-rules:
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "watch"]
-
-# rolebinding.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ include "launchpad.fullname" . }}-reader
-subjects:
-- kind: ServiceAccount
-  name: {{ include "launchpad.fullname" . }}-sa
-  namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: Role
-  name: {{ include "launchpad.fullname" . }}-reader
-  apiGroup: rbac.authorization.k8s.io
-```
-
-The Deployment spec must include `serviceAccountName: {{ include "launchpad.fullname" . }}-sa` — without this, the pod uses the `default` ServiceAccount (which has no RBAC role) and `load_incluster_config()` succeeds but API calls return 403.
-
-**Namespace strategy:** `default` namespace for both apps. Role is namespace-scoped (not ClusterRole). The diagnostics section lists pods/deployments in `default` only — correct for this project's scope. A `K8S_NAMESPACE` ConfigMap key makes the target namespace configurable without changing templates.
-
-### Pattern 4: Makefile Extension — LP_ Variable Block + Named Targets
-
-**What:** Add a second variable block and named targets for the launchpad app. Existing targets (`build`, `load`, `deploy`, etc.) are untouched — they still refer to field-guide-api. New targets use `LP_` prefix for variables and `-launchpad` suffix for target names.
-
-**Why this over a parameterized APP variable:**
-- `make build APP=field-guide-api` changes the existing `make build` contract — breaks muscle memory and any scripts that call `make build`
-- Named targets are explicit in `make help` output — a reviewer sees both apps clearly
-- Git Bash / MSYS does not add complications from variable interpolation in multi-value targets
-- The v1.0 `make up` and `make smoke` chains continue to work unchanged
-
-**Additions to Makefile:**
-```makefile
-# Launchpad image coordinates — override with: make build-launchpad LP_TAG=v1.1
-LP_IMAGE   ?= localhost:5001/launchpad
-LP_TAG     ?= dev
-LP_RELEASE ?= launchpad
-LP_CHART   ?= charts/launchpad
-
-.PHONY: build-launchpad load-launchpad deploy-launchpad undeploy-launchpad \
-        port-forward-launchpad smoke-launchpad up-all test-launchpad
-
-build-launchpad: ## build the launchpad Docker image
-	docker build -t $(LP_IMAGE):$(LP_TAG) apps/launchpad
-
-load-launchpad: ## push launchpad image to the local kind registry
-	docker push $(LP_IMAGE):$(LP_TAG)
-
-deploy-launchpad: ## install or upgrade the launchpad Helm release
-	helm upgrade --install $(LP_RELEASE) $(LP_CHART) \
-		--set image.repository=$(LP_IMAGE) --set image.tag=$(LP_TAG) \
-		--wait --timeout 180s
-
-undeploy-launchpad: ## remove the launchpad Helm release
-	helm uninstall $(LP_RELEASE)
-
-port-forward-launchpad: ## forward svc/launchpad to localhost:8081 (Ctrl-C to stop)
-	kubectl port-forward svc/$(LP_RELEASE) 8081:80
-
-smoke-launchpad: ## smoke test the launchpad dashboard endpoints
-	# (same background port-forward + curl pattern as existing smoke target)
-	# checks: /, /health, /api/status
-
-test-launchpad: ## run launchpad pytest suite with coverage
-	cd apps/launchpad && \
-	{ [ -d .venv ] || $(PYTHON) -m venv .venv; } && \
-	VENV_PY=$$([ -x .venv/bin/python ] && echo .venv/bin/python || echo .venv/Scripts/python) && \
-	"$$VENV_PY" -m pip install -q -r requirements-dev.txt && \
-	"$$VENV_PY" -m pytest
-
-up-all: cluster-up build load deploy build-launchpad load-launchpad deploy-launchpad
-up-all: ## bring up full stack: cluster + both apps (field-guide-api + launchpad)
-```
-
-Port assignment: `port-forward` uses `localhost:8080` (field-guide-api, existing). `port-forward-launchpad` uses `localhost:8081` (no conflict).
-
-`.PHONY` declaration in the existing line must be extended to include all new targets. Git Bash and MSYS constraints are already handled by the existing `SHELL := /bin/bash` and `export MSYS_NO_PATHCONV=1` headers.
-
----
+**Trade-offs:** Cascade ordering bugs are possible if specificity isn't managed, but the project has already accepted this trade-off for `style.css`; consistency matters more than avoiding a hypothetical CSS specificity fight.
 
 ## Data Flow
 
-### Request Flow: Browser → Launchpad Dashboard
+### Scrape flow (new)
 
 ```
-Browser GET http://localhost:8081/
-    │  (kubectl port-forward svc/launchpad 8081:80 active)
-    ▼
-launchpad ClusterIP Service (port 80 → targetPort 8000)
-    ▼
-launchpad pod (gunicorn :8000)
-    │  Jinja2 route: ui.py GET /
-    ▼
-status.py: check_field_guide_health()
-    │  HTTP GET http://field-guide-api/health (ClusterIP DNS, 2s timeout)
-    ▼
-field-guide-api pod :8000 /health → 200 {"status": "ok"}
-    │
-k8s.py: list_namespaced_pod(namespace="default")
-    │  HTTPS kubernetes.default.svc.cluster.local (SA token)
-    ▼
-K8s API → pod list in default namespace
-    │
-mongo: db.services.find(), db.events.find()
-    ▼
-launchpad-mongodb ClusterIP Service :27017
-    ▼
-launchpad-mongodb pod → launchpad database
-    │
-    ◄── Jinja2 renders index.html with status cards + service list
-    ◄── HTTP 200 HTML response to browser
+Prometheus Operator (observability ns)
+    ↓ watches ServiceMonitor objects (all namespaces, empty namespaceSelector by default)
+ServiceMonitor(field-guide-api) / ServiceMonitor(launchpad)   [infra/observability/, standalone]
+    ↓ selector.matchLabels resolves to existing Services in "default" ns
+Service(field-guide-api):80 / Service(launchpad):80  [UNCHANGED — no chart edits]
+    ↓ Endpoints -> Pod IP:8000/metrics
+Prometheus scrapes /metrics on each app's existing prometheus-flask-exporter endpoint
+    ↓ stored as time series
+Prometheus TSDB (short retention, no PVC needed — kind clusters are disposable)
 ```
 
-### Graceful Degradation Flow (local dev, no cluster)
+### Metric-card query flow (new)
 
 ```
-Developer runs: cd apps/launchpad && python -m flask run
-    │  MONGO_URI=mongodb://localhost:27017/launchpad (.env)
-    │  FIELD_GUIDE_URL=http://localhost:8080 (.env)
-    ▼
-check_field_guide_health()
-    │  requests.get("http://localhost:8080/health", timeout=2)
-    │  → ConnectionRefused (no port-forward active)
-    ▼
-returns {"status": "unreachable"}  ← no crash, UI shows degraded card
-
-k8s.py: init_k8s_client()
-    │  load_incluster_config() → ConfigException (no SA token)
-    │  load_kube_config() → succeeds if cluster is up; ConfigException if not
-    ▼
-returns (None, None) → k8s routes return {"status": "unavailable"}
-    │
-Jinja2 renders dashboard with degraded/unknown states for K8s cards
+Browser (htmx poll, e.g. every 10-15s)
+    ↓ GET /partials/metric-cards  (new launchpad route)
+app/routes/observability.py
+    ↓ calls app/prometheus.py.query_instant(promql)
+    ↓ requests.get(PROMETHEUS_BASE_URL + /api/v1/query, timeout=2s)
+prometheus-operated.observability.svc.cluster.local:9090   [stable, hardcoded operator-governed Service name]
+    ↓ success: render metric values + "Open in Grafana" deep link (GRAFANA_BASE_URL)
+    ↓ failure/timeout: render dimmed "NO SIGNAL" card — same shape as field_guide_reachable=False today
 ```
 
-### Data Flow: Service Catalog CRUD
+### Demo-seeding flow (new, independent of observability)
 
 ```
-Browser POST /api/services (htmx request)
-    │  {"name": "my-api", "repo": "github.com/..."}
-    ▼
-launchpad pod: services.py POST handler
-    │  validates payload (name required, URL format)
-    ▼
-mongo: db.services.insert_one(doc)   +   db.events.insert_one(event_doc)
-    ▼
-launchpad-mongodb pod → launchpad DB
-    │
-    ◄── HTTP 200 HTML fragment (htmx swap target)
-    ◄── service card appears in browser without full page reload
+make seed-demo
+    ↓ idempotent curl/POST sequence against launchpad's EXISTING /catalog/new (v1.1, unchanged)
+    ↓ (optionally) idempotent GETs against field-guide-api's existing /entries to generate traffic
+    ↓ registrations land in launchpad's own Mongo (services collection) — same code path as a human filling the form
+    ↓ activity feed populates via the EXISTING events.record_event() call inside catalog_new() — zero app-code changes
 ```
 
----
+### Key Data Flows
+
+1. **Scrape flow requires zero chart changes** — the only new Kubernetes objects are the `ServiceMonitor`s and the kube-prometheus-stack release itself; existing Service labels are already sufficient selectors.
+2. **Query flow reuses the exact resiliency discipline already proven in `app/status.py`** — same timeout constant pattern, same never-raise contract, same "sentinel value on failure" shape.
+3. **Demo seeding is fully decoupled from the observability stack** — it only exercises pre-existing, already-tested v1.1 write endpoints, so it can be built and validated independently and early.
+
+## Scaling Considerations
+
+This is a single-developer local `kind` cluster, not a multi-tenant production system — "scaling" here means "fits in Docker Desktop's resource budget," not "handles more users."
+
+| Scale | Architecture Adjustments |
+|-------|---------------------------|
+| Local kind, current milestone | Trim kube-prometheus-stack aggressively: disable Alertmanager + node-exporter (already decided), keep Prometheus retention short (e.g. `--storage.tsdb.retention.time=6h` or similar via `prometheus.prometheusSpec.retention`), use `emptyDir` (no PVC) for Prometheus data — disposable by design, matches `reset-local`'s "everything is destroyable" philosophy |
+| If dashboards/metrics need to survive `reset-local` | Not recommended for this milestone — dashboards are already reproducible-as-code (ConfigMaps re-apply on every `observability-up`), so there is no state worth persisting; keep it stateless |
+| If a future milestone adds Loki (v2.1, deferred) | Loki will need its own PVC and its own ServiceMonitor/scrape-config equivalent (or a Promtail/Alloy DaemonSet) — out of scope now, but the `infra/observability/` flat-manifest pattern established here should extend cleanly |
+
+### Scaling Priorities
+
+1. **First bottleneck: Docker Desktop memory/CPU for kind.** Prometheus Operator + Prometheus + Grafana + kube-state-metrics, even trimmed, is the heaviest thing this cluster has run so far (heavier than two Flask apps + two MongoDBs combined). Set explicit low `resources.requests/limits` on every kube-prometheus-stack sub-component in the trimmed values file, mirroring the existing apps' `50m/128Mi` request pattern.
+2. **Second bottleneck: cluster spin-up time.** `observability-up` adds a `helm repo add/update` + a multi-pod rollout (CRDs first, then operator, then Prometheus/Grafana pods) on top of the existing `up-all` sequence — budget for `--wait --timeout` values noticeably longer than the existing 180s used by `deploy`/`deploy-launchpad`.
+
+## Anti-Patterns
+
+### Anti-Pattern 1: Putting ServiceMonitors inside `charts/field-guide-api` or `charts/launchpad`
+
+**What people do:** Add a `templates/servicemonitor.yaml` to the app chart because "it's right next to the Service it targets."
+**Why it's wrong:** Violates the explicit hard constraint (zero modification to existing charts) and couples the app chart's lifecycle to whether the observability stack CRDs (`monitoring.coreos.com/v1`) exist — `helm install` of either app chart would fail on a cluster without the Prometheus Operator CRDs installed first, breaking the v1.1 smoke-test invariant that both charts install cleanly standalone.
+**Do this instead:** Standalone ServiceMonitor manifests in `infra/observability/`, applied only when the observability stack (and its CRDs) already exist.
+
+### Anti-Pattern 2: Iframe-embedded Grafana panels in launchpad
+
+**What people do:** Drop an `<iframe src="http://grafana/d/...">` into the dashboard for "instant" visuals.
+**Why it's wrong:** Already identified and rejected in this project's own Key Decisions — iframes require Grafana to be port-forwarded/reachable from the browser (not just in-cluster), break the "vendored/no-CDN" and "graceful degradation" philosophy, and clash with the Mission Control skin's visual language.
+**Do this instead:** Native Prometheus-fed metric cards (server-side query, rendered as Jinja/htmx fragments) + an "Open in Grafana" deep link for drill-down — already the locked decision.
+
+### Anti-Pattern 3: Coupling `/health` (readiness) to Prometheus/Grafana reachability
+
+**What people do:** Add a Prometheus ping to the readinessProbe target because "the platform isn't really healthy without observability."
+**Why it's wrong:** `/health` is explicitly, deliberately scoped to launchpad's own MongoDB only (documented decision: "readinessProbe must never couple to downstream services"). Coupling it to an optional, independently-lifecycled component (observability may not even be installed) would make the launchpad pod NotReady whenever `observability-down` is run, which is a working, supported state, not a failure.
+**Do this instead:** Treat Prometheus/Grafana reachability exactly like field-guide-api reachability today — a `/api/status`-style aggregated check, never a readiness gate.
+
+### Anti-Pattern 4: One ConfigMap holding multiple Grafana dashboard JSONs
+
+**What people do:** Bundle uptime + latency + error-rate dashboards into a single `dashboards-configmap.yaml` for tidiness.
+**Why it's wrong:** Documented upstream sidecar bug/limitation — multi-dashboard ConfigMaps are not reliably reflected in Grafana; updates to one dashboard can silently fail to propagate.
+**Do this instead:** One ConfigMap per dashboard JSON, each labeled `grafana_dashboard: "1"`.
 
 ## Integration Points
 
-### New Integration Points (v1.1)
+### External Services
 
-| Integration | Direction | Mechanism | Failure mode |
-|-------------|-----------|-----------|--------------|
-| launchpad → field-guide-api | outbound HTTP | `requests.get(FIELD_GUIDE_URL + "/health", timeout=2)` | `ConnectionError` → `{"status": "unreachable"}`; UI shows degraded card |
-| launchpad → K8s API | outbound HTTPS | `kubernetes` Python client, in-cluster SA token | `ApiException` / `ConfigException` → `{"status": "unavailable"}`; diagnostics section hidden |
-| launchpad → launchpad-mongodb | MongoDB wire | Flask-PyMongo, `MONGO_URI` from K8s Secret | `ServerSelectionTimeoutError` (2s) → `/health` returns 503; service catalog routes return 503 |
-| browser → launchpad | inbound HTTP | kubectl port-forward svc/launchpad 8081:80 | port-forward not active → connection refused; not an app-level concern |
+| Service | Integration Pattern | Notes |
+|---------|----------------------|-------|
+| kube-prometheus-stack (Prometheus Operator + Prometheus + Grafana + kube-state-metrics) | Helm chart `prometheus-community/kube-prometheus-stack`, installed via `helm upgrade --install --create-namespace -n observability` from `scripts/observability-up.sh` | Trim via values: `alertmanager.enabled: false`, `nodeExporter.enabled: false`; leave `kubeStateMetrics.enabled: true`, `grafana.enabled: true` |
+| Prometheus HTTP API | launchpad's new `app/prometheus.py` calls `GET {PROMETHEUS_BASE_URL}/api/v1/query` | In-cluster DNS default: `http://prometheus-operated.observability.svc.cluster.local:9090` — this Service name is **hardcoded by the Prometheus Operator itself** (not the Helm release name), so it does not change if the observability Helm release is renamed. Mirrors the existing `FIELD_GUIDE_BASE_URL` config pattern exactly. |
+| Grafana | Deep links only (`GRAFANA_BASE_URL` + dashboard UID), plus `make port-forward-grafana` for human access | Service name: `<observability-release>-grafana`, port 80. Default admin credentials: username `admin`, password from Secret `<release>-grafana` key `admin-password` (default value `prom-operator` unless overridden) — treat exactly like the existing MongoDB dev-password convention: fine for local kind, documented as local-dev-only, never a real credential |
+| ServiceMonitor discovery selector | `kube-prometheus-stack`'s `Prometheus` CR defaults to `serviceMonitorSelectorNilUsesHelmValues: true`, which **requires every ServiceMonitor to carry a `release: <helm-release-name>` label** to be discovered | Since the two new ServiceMonitors are standalone manifests (not chart-templated), this label must be added by hand in `infra/observability/servicemonitor-*.yaml`, OR set `serviceMonitorSelectorNilUsesHelmValues: false` in the trimmed values to discover ServiceMonitors cluster-wide regardless of label — recommended for this single-tenant local environment, since there is no risk of accidentally scraping an unrelated tenant's ServiceMonitors |
 
-### Existing Integration Points (v1.0, unchanged)
-
-| Integration | Direction | Mechanism | Notes |
-|-------------|-----------|-----------|-------|
-| field-guide-api → field-guide-api-mongodb | outbound MongoDB | Flask-PyMongo, `MONGO_URI` from K8s Secret | `?serverSelectionTimeoutMS=2000` in URI |
-| Makefile → Docker daemon | build | `docker build`, `docker push` | `MSYS_NO_PATHCONV=1` prevents path mangling |
-| Makefile → Helm | deploy | `helm upgrade --install --wait --timeout 180s` | `--wait` required; pods must be Ready before target returns |
-| pod → local registry | image pull | containerd `hosts.toml` mirror config | `localhost:5001` → `http://kind-registry:5000` via Docker network |
-
-### Internal Boundaries (launchpad app)
+### Internal Boundaries
 
 | Boundary | Communication | Notes |
-|----------|---------------|-------|
-| `routes/ui.py` ↔ `routes/status.py` | Function call (shared module) | UI route calls status helpers; no circular import if status has no Flask template deps |
-| `routes/*.py` ↔ `extensions.py` | Import `mongo` from `app.extensions` | Same pattern as field-guide-api; never import from `app.__init__` |
-| `routes/*.py` ↔ `k8s.py` | Import `init_k8s_client` function | `k8s.py` is a standalone module; initialized once at app startup in `create_app()` and stored on `app.extensions` or `g` |
-| `app/__init__.py` ↔ blueprints | Deferred import inside `create_app()` | Same pattern as field-guide-api; blueprints imported after extensions are initialized |
+|----------|----------------|-------|
+| launchpad ↔ Prometheus | Outbound HTTP (PromQL `/api/v1/query`), 2s timeout, never-raise | New `app/prometheus.py`; consumed by a new partial-fragment route, following the existing `field_guide_reachable` precedent in `app/status.py` |
+| launchpad ↔ Grafana | No runtime HTTP call — deep links only (URL construction, no request) | Avoids adding Grafana as a second reachability dependency; simpler and matches the "no iframe" decision |
+| `infra/observability/` ↔ `charts/field-guide-api` / `charts/launchpad` | Label-selector match only, no object ownership, no Helm dependency relationship | ServiceMonitors reference Services by label; if either app chart is ever uninstalled and reinstalled, the ServiceMonitor keeps working unmodified as long as the labels (`app.kubernetes.io/name`) stay the same, which they do (locked by the `_helpers.tpl` naming convention) |
+| Makefile: existing targets ↔ new targets | New targets are pure additions (`.PHONY` list append, new target bodies); `up-mission-control` should be a NEW umbrella that calls `up-all` + `observability-up` + `seed-demo` in sequence, exactly like `up-all` today composes `up` + the launchpad build/load/deploy trio | Do not rename or alter `up`, `up-all`, `smoke`, `smoke-all`, or their bodies; add `smoke-mission-control` alongside `smoke-all` the same way `smoke-all` was added alongside `smoke`/`smoke-launchpad` in Phase 10 |
 
----
+## Suggested Build Order (dependency-aware)
 
-## Build Order for v1.1
+1. **`infra/observability/kube-prometheus-stack-values.yaml` + `scripts/observability-up.sh`/`observability-down.sh`.** Stand up the trimmed stack manually first (`helm upgrade --install`), verify all pods Running in the `observability` namespace, before writing any launchpad code. This is the highest-uncertainty piece (resource footprint, Helm chart version pinning) and should be de-risked first, in isolation.
+2. **ServiceMonitors for field-guide-api and launchpad** (standalone manifests). Apply them, open the Prometheus UI (port-forward), and confirm both targets show `UP` in the Targets page. This is the cheapest possible validation of the "existing Service labels are sufficient" assumption — do this before writing a single line of query code.
+3. **Grafana dashboard ConfigMaps (dashboards-as-code)**, one per dashboard, verified via the Grafana UI (port-forward) — confirms the sidecar-discovery wiring independent of anything in launchpad.
+4. **Additive Makefile targets: `observability-up`, `observability-down`, `port-forward-grafana`.** Codify steps 1-3 into repeatable commands now, so the rest of the work (and any human reviewer) can bring the stack up/down in one command instead of manual `helm`/`kubectl` calls.
+5. **`app/prometheus.py` + `PROMETHEUS_BASE_URL`/`GRAFANA_BASE_URL` config additions** (`app/config.py`, `.env.example`, `charts/launchpad/values.yaml` new keys, `configmap.yaml`/`deployment.yaml` new env entries — additive keys only, same precedent as v1.1's `eventsTtlSeconds` addition to this same chart) — buildable and unit-testable with mocked `requests.get` **without a live cluster**, exactly like the existing `test_status.py` pattern (`mock_requests_get` / `mock_requests_get_unreachable` fixtures). Do this before any UI work so the hermetic test suite covers the new module early.
+6. **New metric-cards partial route + template**, wired to `app/prometheus.py`, with the "NO SIGNAL" dimmed-state branch tested exactly like `field_guide_reachable=False` is tested today.
+7. **`mission-control.css` + one new `<link>` in `base.html` + hero/metric-card markup in `index.html`.** Purely visual layer, safest to do last since the underlying data plumbing (steps 1-6) is already proven and stable by this point.
+8. **`make seed-demo`.** Independent of everything above (only depends on already-shipped v1.1 `/catalog/new` etc.) — can technically be built any time after step 1, but sequencing it near the end means it can immediately be used to populate the newly-built metric cards/dashboards for the final demo screenshots.
+9. **`up-mission-control` umbrella target + `smoke-mission-control`.** Last — composes everything above (`up-all` + `observability-up` + `seed-demo`), following the exact compositional style already used by `up-all`/`smoke-all`.
 
-Dependencies are strict within the phase structure. Each item must be complete before the next can be validated end-to-end.
+**Why this order:** Steps 1-3 de-risk the highest-uncertainty, most-external part (a third-party Helm chart's behavior in this specific local kind environment) before any code is written against it. Step 5 can proceed in parallel with steps 2-4 once the `PROMETHEUS_BASE_URL` convention is agreed, since its tests are hermetic and don't require the live stack. UI polish (step 7) is deliberately last because it's the lowest-risk, most-iterative part and benefits from having real data (steps 1-6) to render before styling it.
 
-```
-EXISTING (v1.0, already done):
-  kind cluster + local registry         (make cluster-up)
-  field-guide-api image + chart         (make build load deploy)
+## A Note on "Additive Only" and This Chart's Own Files
 
-v1.1 PHASE 1: apps/launchpad/ scaffold
-  ├── app/__init__.py (create_app factory — identical pattern to field-guide-api)
-  ├── app/config.py (MONGO_URI, FIELD_GUIDE_URL, K8S_NAMESPACE env vars)
-  ├── app/extensions.py (Flask-PyMongo init)
-  ├── app/k8s.py (in-cluster → kubeconfig → None degradation)
-  ├── app/routes/ stubs (ui.py, status.py, services.py, events.py)
-  ├── tests/conftest.py (create_app fixture + mock k8s + mock requests)
-  ├── requirements.txt + requirements-dev.txt
-  └── pytest.ini
-  VALIDATES: make test-launchpad passes without cluster or MongoDB
-
-v1.1 PHASE 2: UI layer
-  ├── app/templates/ (base.html, index.html, services.html, diagnostics.html)
-  ├── app/static/ (vendored htmx.min.js, CSS)
-  └── routes/ui.py (Jinja2 render + htmx fragment responses)
-  VALIDATES: flask run locally; browser shows dashboard (degraded state cards are OK)
-
-v1.1 PHASE 3: Status API + field-guide-api integration
-  ├── routes/status.py (GET /health, GET /api/status)
-  └── status.py calls FIELD_GUIDE_URL/health with 2s timeout + graceful degradation
-  VALIDATES: /health returns 200; /api/status returns JSON with field_guide status
-
-v1.1 PHASE 4: K8s client + RBAC + charts/launchpad/
-  ├── k8s.py complete (list pods, list deployments)
-  ├── routes/status.py K8s section
-  ├── charts/launchpad/Chart.yaml
-  ├── charts/launchpad/values.yaml
-  ├── charts/launchpad/templates/_helpers.tpl
-  ├── charts/launchpad/templates/deployment.yaml   (includes serviceAccountName)
-  ├── charts/launchpad/templates/service.yaml
-  ├── charts/launchpad/templates/configmap.yaml
-  ├── charts/launchpad/templates/secret.yaml       (MONGO_URI)
-  ├── charts/launchpad/templates/rbac/serviceaccount.yaml
-  ├── charts/launchpad/templates/rbac/role.yaml
-  ├── charts/launchpad/templates/rbac/rolebinding.yaml
-  └── apps/launchpad/Dockerfile
-  VALIDATES: helm lint charts/launchpad/ passes; make build-launchpad load-launchpad deploy-launchpad
-             runs; pod is Running; /health 200; /api/status shows K8s pod list
-
-v1.1 PHASE 5: Service catalog + events (MongoDB CRUD)
-  ├── charts/launchpad/templates/mongodb/ (deployment/service/pvc/secret — same pattern)
-  ├── routes/services.py (GET/POST/DELETE /api/services + htmx fragment)
-  └── routes/events.py (GET /api/events + htmx stream fragment)
-  VALIDATES: service catalog form submits; data persists in launchpad DB;
-             make undeploy-launchpad + deploy-launchpad; data survives (PVC retained)
-
-v1.1 PHASE 6: Makefile + integration smoke test
-  ├── Makefile LP_ variable block
-  ├── Makefile launchpad targets (build-launchpad, load-launchpad, deploy-launchpad, ...)
-  ├── Makefile up-all target
-  └── smoke-launchpad target
-  VALIDATES: make up-all (fresh cluster) → both apps running → smoke-launchpad PASS
-             make help shows all new targets with descriptions
-```
-
-**Critical ordering constraints:**
-
-- `charts/launchpad/templates/rbac/` must include `serviceAccountName` in the Deployment template — if omitted, the pod uses `default` SA and K8s API calls return 403 even though RBAC looks correct in `kubectl get rolebinding`.
-- MongoDB manifests in `charts/launchpad/templates/mongodb/` must use helpers from `_helpers.tpl` (e.g., `launchpad.mongodb.fullname`) that are distinct from the `field-guide-api` helpers — name collisions in the same namespace would route traffic between the wrong MongoDB pods.
-- `make deploy-launchpad` should run after `make deploy` (field-guide-api) so the field-guide-api Service exists when the dashboard's status check first runs, but this is a soft ordering — launchpad degrades gracefully if field-guide-api is absent.
-
----
-
-## Anti-Patterns for v1.1
-
-### Anti-Pattern 1: Shared MongoDB with Cross-Chart Secret Reference
-
-**What people do:** Set `mongodb.enabled=false` in `charts/field-guide-api/values.yaml` and point both apps at a single MongoDB release.
-
-**Why it's wrong:** It requires modifying the working v1.0 chart, introducing a new deploy-time dependency ordering (MongoDB release must exist before either app chart), and complicates `helm uninstall` for either app. The `externalMongoUri` seam exists for exactly this scenario but using it here adds risk with minimal benefit for two lightweight apps.
-
-**Do this instead:** Two `mongo:7` pods, two databases. The local kind cluster has ample resources. Keep each chart self-contained.
-
-### Anti-Pattern 2: Using ClusterRole Instead of Role for Dashboard RBAC
-
-**What people do:** Create a `ClusterRole` for the ServiceAccount to avoid dealing with namespace scoping.
-
-**Why it's wrong:** ClusterRole grants permissions across ALL namespaces. For a dashboard that only needs to inspect the `default` namespace, this is unnecessary privilege escalation and a bad security pattern — especially in a portfolio project where a reviewer will check the RBAC manifests.
-
-**Do this instead:** `Role` + `RoleBinding` scoped to `default`. If a future PRD requires multi-namespace inspection, expand to `ClusterRole` with justification in a comment.
-
-### Anti-Pattern 3: Hardcoding Service DNS in the App
-
-**What people do:** `FIELD_GUIDE_URL = "http://field-guide-api"` as a Python constant.
-
-**Why it's wrong:** The URL must be overridable for local dev (`localhost:8080`), CI (mock), and future environments. Hardcoded URLs also break `helm lint` reasoning when the target service name changes.
-
-**Do this instead:** Read from environment variable with a sensible local default. Inject via ConfigMap in the chart. The value in `values.yaml` becomes the single source of truth for the in-cluster URL.
-
-### Anti-Pattern 4: Duplicating Makefile targets instead of LP_ prefix pattern
-
-**What people do:** Copy `build`, `load`, `deploy`, `smoke` target bodies and change image/release names inside them.
-
-**Why it's wrong:** The existing targets refer to `$(IMAGE)`, `$(RELEASE)`, `$(CHART)` variables. Copying and editing the bodies makes `make help` ambiguous and creates divergence when the original targets are updated.
-
-**Do this instead:** New variable block with `LP_` prefix + new target names (`build-launchpad`, etc.). The `up-all` composite chains both sets. `make build` always means field-guide-api; `make build-launchpad` always means the dashboard. No ambiguity.
-
-### Anti-Pattern 5: Calling `load_incluster_config()` Without a Try/Except
-
-**What people do:** `kubernetes.config.load_incluster_config()` at module import time or in `create_app()` without catching `ConfigException`.
-
-**Why it's wrong:** Module-level K8s config loading fails immediately outside the cluster, making the app unimportable for tests. `create_app()` crashes on every `make test-launchpad` run in a developer environment without a cluster.
-
-**Do this instead:** Lazy initialization with the try/except chain in `k8s.py`. Store the result on `current_app` or return `None` when no config is available. Routes check for `None` and return a degraded response.
-
----
-
-## Namespace Strategy
-
-Both apps deploy in the `default` namespace. This is intentional for v1.1:
-- ClusterIP Service DNS short-form works: `http://field-guide-api` resolves within `default`
-- RBAC `Role` (not `ClusterRole`) scoped to `default` is correct minimum privilege
-- `kubectl port-forward`, `make smoke`, and `make smoke-launchpad` use the same namespace context
-- No additional `kubectl config set-context` steps for the developer
-
-A dedicated `launchpad` namespace would require cross-namespace DNS (`http://field-guide-api.default.svc.cluster.local`), namespace-aware RBAC, and `--namespace` flags on every `helm upgrade` and `kubectl` call. Not justified for this scope.
-
----
+`charts/field-guide-api` gets zero touch this milestone — it is scraped purely via label-matching ServiceMonitors and needs nothing new. `charts/launchpad`, however, IS the Mission Control app being enhanced, so it will gain new (not modified) keys: `PROMETHEUS_BASE_URL`/`GRAFANA_BASE_URL` in `values.yaml`/`configmap.yaml`/`deployment.yaml` env block, and a new blueprint/route. This mirrors the project's own v1.1 precedent (`eventsTtlSeconds` was added to this exact chart in v1.1 without being considered a violation of "additive only"). The hard constraint is best read as: no existing key's behavior changes, no existing route's contract changes, no existing Makefile target's body changes — new keys/routes/targets are exactly what "additive" means. Recommend confirming this reading explicitly during roadmap/phase planning so it isn't re-litigated mid-implementation.
 
 ## Sources
 
-- `charts/field-guide-api/` — live codebase inspection: Helm helper patterns, MongoDB manifest structure, RBAC-free baseline (HIGH confidence)
-- `Makefile` — live codebase inspection: variable naming conventions, `MSYS_NO_PATHCONV`, `SHELL := /bin/bash`, `LP_` prefix approach (HIGH confidence)
-- `apps/field-guide-api/app/__init__.py` — live codebase inspection: app factory pattern to replicate in launchpad (HIGH confidence)
-- [kubernetes Python client](https://github.com/kubernetes-client/python) — `load_incluster_config()` / `load_kube_config()` / `ConfigException` pattern (HIGH confidence)
-- [Kubernetes RBAC docs](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — Role vs ClusterRole, ServiceAccount mounting, projected token path (HIGH confidence)
-- [K8s in-cluster config](https://kubernetes.io/docs/tasks/run-application/access-api-from-pod/) — SA token path `/var/run/secrets/kubernetes.io/serviceaccount/`, `kubernetes.default.svc` (HIGH confidence)
-- [K8s Service DNS](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/) — `<svc>.<namespace>.svc.cluster.local` resolution (HIGH confidence)
+- [prometheus-community/helm-charts kube-prometheus-stack values.yaml](https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml) — component enable/disable flags (HIGH confidence)
+- [prometheus-community/helm-charts issue #1513 — serviceMonitorSelector label requirement](https://github.com/prometheus-community/helm-charts/issues/1513) and [issue #2051](https://github.com/prometheus-community/helm-charts/issues/2051) — confirms `serviceMonitorSelectorNilUsesHelmValues` default behavior requiring a `release` label on out-of-chart ServiceMonitors (MEDIUM-HIGH confidence, multiple corroborating GitHub issues)
+- [prometheus-operator/prometheus-operator issue #149 — `prometheus-operated` governing Service](https://github.com/prometheus-operator/prometheus-operator/issues/149) and related discussion confirming the name is hardcoded in the operator, not release-name-dependent (HIGH confidence)
+- [grafana/helm-charts issue #527 — sidecar dashboard ConfigMap provisioning race](https://github.com/grafana/helm-charts/issues/527) and community guidance on one-dashboard-per-ConfigMap (MEDIUM confidence — community-sourced, but consistent across multiple independent write-ups)
+- [Grafana sidecar `sidecar.dashboards.enabled` / `grafana_dashboard` label convention](https://medium.com/cloud-native-daily/provision-grafana-dashboards-and-alerts-using-helm-and-sidecars-733dcd223037) (MEDIUM confidence, cross-checked against grafana-operator official docs example)
+- [kube-prometheus-stack Grafana default admin secret `<release>-grafana` / `admin-password` key](https://github.com/prometheus-community/helm-charts/issues/4558) and related issues (MEDIUM-HIGH confidence)
+- In-repo: `charts/launchpad/templates/_helpers.tpl`, `charts/launchpad/templates/service.yaml`, `charts/field-guide-api/templates/service.yaml` — confirms existing Service labels are already sufficient for ServiceMonitor selectors, verified by direct read (HIGH confidence, primary source)
+- In-repo: `apps/launchpad/app/status.py`, `apps/launchpad/app/k8s.py`, `apps/launchpad/tests/test_status.py` — confirms the established graceful-degradation / hermetic-test pattern this milestone's new code must extend (HIGH confidence, primary source)
+- In-repo: `Makefile`, `.planning/PROJECT.md` — confirms frozen target list, additive-only precedent (e.g. `eventsTtlSeconds` added to `charts/launchpad/values.yaml` in v1.1) (HIGH confidence, primary source)
 
 ---
-*Architecture research for: k8s-launchpad v1.1 Product Dashboard (PRD-3)*
-*Researched: 2026-07-08*
+*Architecture research for: k8s-launchpad v2.0 Observability + Mission Control integration*
+*Researched: 2026-07-16*

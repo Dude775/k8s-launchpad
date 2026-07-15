@@ -1,464 +1,289 @@
 # Pitfalls Research
 
-**Domain:** Adding an IDP dashboard (Flask+htmx, K8s API diagnostics, shared MongoDB, status aggregation) to an existing single-app local Kubernetes platform (k8s-launchpad v1.0)
-**Researched:** 2026-07-08
-**Confidence:** HIGH — pitfalls derived from the actual v1.0 codebase (Makefile, chart templates, conftest.py) plus verified library documentation patterns
-
----
+**Domain:** Adding kube-prometheus-stack observability + a UI reskin to an existing additive-only, resource-constrained kind/Docker-Desktop local IDP (k8s-launchpad v2.0)
+**Researched:** 2026-07-16
+**Confidence:** MEDIUM-HIGH (critical items cross-verified against prometheus-community/helm-charts and prometheus-operator issue trackers plus official docs; some Windows/Docker-Desktop specifics are MEDIUM — verify live on the actual dev machine)
 
 ## Critical Pitfalls
 
-### Pitfall 1: Makefile variable collision — second app overrides first app's build/deploy targets
+### Pitfall 1: kube-prometheus-stack's default kubelet/etcd/scheduler/controller-manager scrape jobs are permanently "down" on kind
 
 **What goes wrong:**
-The existing Makefile defines `IMAGE`, `RELEASE`, and `CHART` as top-level variables defaulting to `field-guide-api` values. Adding a `make build` and `make deploy` for `launchpad` by changing those defaults — or adding targets without namespacing — means `make deploy` now deploys the dashboard and leaves no obvious way to redeploy the field-guide API without manually passing every override. The existing smoke test and port-forward targets silently target the wrong release.
+Out of the box, kube-prometheus-stack ships scrape jobs for `kube-etcd`, `kube-scheduler`, `kube-controller-manager`, and `kube-proxy` that assume a kubeadm cluster where these are static pods reachable over the node's real network interface with metrics bound to a non-loopback address. On kind (and Docker Desktop's Kubernetes), these control-plane components bind metrics to `127.0.0.1` inside the node container, so Prometheus's scrape targets page shows a permanent wall of red/down targets — noise that undermines a portfolio-quality "All Systems Online" demo.
 
 **Why it happens:**
-The v1.0 Makefile was designed for a single app. The `IMAGE`, `RELEASE`, and `CHART` variables at the top are the only coordination point. Developers add a second set of targets, realize the defaults conflict, and either change the defaults (breaking the first app) or add ad-hoc targets that duplicate logic.
+The chart's defaults target production kubeadm topology, not kind's containerized-node topology. This is a widely reported, structural mismatch, not a misconfiguration.
 
 **How to avoid:**
-Namespace every variable for both apps: `FGA_IMAGE`, `FGA_RELEASE`, `FGA_CHART` for field-guide-api; `LP_IMAGE`, `LP_RELEASE`, `LP_CHART` for launchpad. Keep the original top-level variable names removed or aliased to avoid ambiguity. Add explicit targets: `build-launchpad`, `deploy-launchpad`, `smoke-launchpad`, `port-forward-launchpad`. The shared `make up` composite target must sequence both apps: `cluster-up build-fga load-fga deploy-fga build-launchpad load-launchpad deploy-launchpad`.
+Explicitly set in the observability values file: `kubeEtcd.enabled: false`, `kubeControllerManager.enabled: false`, `kubeScheduler.enabled: false`, `kubeProxy.enabled: false` (in addition to the already-planned `nodeExporter.enabled: false` and `alertmanager.enabled: false`). Keep `kubeApiServer` and `kubeStateMetrics` enabled — those work fine on kind. Document this trimming explicitly in `infra/observability/` values comments so a reviewer understands it's intentional, not broken monitoring.
 
 **Warning signs:**
-- `make deploy` changes the running Helm release from `field-guide-api` to `launchpad` silently
-- `make smoke` tests the wrong service (port-forward targets `svc/field-guide-api` but dashboard is on `svc/launchpad`)
-- `helm list` shows only one release instead of two after `make up`
+Prometheus `/targets` page shows jobs stuck in `down` state immediately after install with connection-refused errors to internal addresses like `10.96.x.x:https`.
 
-**Phase to address:** Phase: Monorepo scaffold for second app (first task of v1.1 — before any code is written)
+**Phase to address:**
+Observability stack install phase (the phase that writes `infra/observability/` values.yaml) — bake the disabled list in from the first `helm install`, not as a later fix.
 
 ---
 
-### Pitfall 2: Helm Service selector collision between two charts in the same namespace
+### Pitfall 2: ServiceMonitor `release:` label mismatch — Prometheus discovers zero targets for field-guide-api/launchpad
 
 **What goes wrong:**
-The new `launchpad` chart is created with `helm create charts/launchpad`, and the developer forgets to change the `app.kubernetes.io/name` value in the generated helpers. Both charts end up with identical `selectorLabels` — `app.kubernetes.io/name: launchpad` and `app.kubernetes.io/instance: launchpad`, but if the release name or chart name collide with the existing chart's pattern, the Service `selector` may route to the wrong pods. The v1.0 chart `_helpers.tpl` uses `app.kubernetes.io/name: {{ include "field-guide-api.name" . }}` derived from Chart.Name — the new chart must derive from its own Chart.Name.
-
-More specifically: the `mongodb.selectorLabels` helper in the v1.0 chart generates `app.kubernetes.io/name: field-guide-api-mongodb`. If the launchpad chart also bundles MongoDB with a MongoDB deployment that carries any overlapping selector labels (e.g., `app.kubernetes.io/instance: launchpad` but `app.kubernetes.io/name: launchpad-mongodb`), Kubernetes Services won't cross-select — but if both charts are installed in the same namespace and a developer copies a Service selector verbatim from one chart to another without renaming, pods get wrong traffic.
+By default, kube-prometheus-stack configures `serviceMonitorSelectorNilUsesHelmValues=true`, which makes the Prometheus Operator only pick up ServiceMonitors carrying the label `release: <helm-release-name>`. A ServiceMonitor created in `infra/observability/` scraping field-guide-api's or launchpad's `/metrics` without that exact label is silently ignored — no error, just zero entries in Service Discovery.
 
 **Why it happens:**
-`helm create` generates a chart with `{{ .Chart.Name }}` in helpers. If the developer edits the chart templates but not `Chart.yaml`'s `name` field, or copies templates from the v1.0 chart without renaming the Helm template function names (`field-guide-api.selectorLabels` → `launchpad.selectorLabels`), selector strings can collide.
+The "release label" requirement is a chart/operator convention, not something obvious from the ServiceMonitor CRD spec itself. It is one of the most frequently filed issues against the chart.
 
 **How to avoid:**
-- The new chart's `Chart.yaml` name must be `launchpad`, not `field-guide-api`
-- All `_helpers.tpl` function names must use the chart's own prefix: `launchpad.fullname`, `launchpad.selectorLabels`, `launchpad.mongodb.fullname`
-- After `helm install`, run `kubectl get ep` on both Services — endpoints must list only the correct pod IPs
-- The launchpad's MongoDB (or shared MongoDB connection) must use a unique service name — do not share the `field-guide-api-mongodb` Service hostname unless intentionally cross-chart (see Pitfall 8)
+Either (a) add `release: <exact-helm-release-name>` to every ServiceMonitor's `metadata.labels`, pinning the release name as a Makefile variable to avoid drift, or (b) set `prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues: false` and `serviceMonitorSelector: {}` so Prometheus watches all ServiceMonitors cluster-wide regardless of label — simpler for a single-tenant local cluster and needs no coordination with existing charts (keeps the additive-only constraint cleaner). Also verify the ServiceMonitor's `spec.selector.matchLabels` matches the **Service** object's labels (not the Pod's) for field-guide-api/launchpad — a second, independent selector layer that's easy to get wrong.
 
 **Warning signs:**
-- `kubectl get endpoints` shows a Service with zero endpoints despite pods Running
-- Field-guide-api returns HTML fragments instead of JSON (routing to launchpad pods)
-- `helm lint` passes but `kubectl describe svc` shows no endpoints for one of the two Services
+`kubectl get servicemonitors -A` shows the objects exist, but Prometheus UI → Status → Target discovery shows nothing for them; the Prometheus config reload logs show no error — this fails silently, not loudly.
 
-**Phase to address:** Phase: Launchpad Helm chart scaffold
+**Phase to address:**
+ServiceMonitor/scraping phase — verify with an actual query against `up{job="field-guide-api"}` returning `1` before moving to dashboards.
 
 ---
 
-### Pitfall 3: Kubernetes Python client blocking the single gunicorn worker
+### Pitfall 3: Grafana sidecar never picks up dashboard ConfigMaps
 
 **What goes wrong:**
-The dashboard's status/diagnostics endpoints call `kubernetes.client.CoreV1Api().list_namespaced_pod(...)` synchronously from a Flask route handler. The kubernetes Python client's HTTP calls use `urllib3` and default to no client-side timeout (`_request_timeout=None`). When the kind API server is slow (cluster under load, resuming from laptop sleep) or unreachable, the urllib3 call hangs indefinitely. With `--workers 1` (the correct setting for this project), the single gunicorn worker is blocked. Every subsequent HTTP request to the dashboard — including htmx polls from open browser tabs, the Kubernetes readinessProbe, and health checks — queues behind the hung worker. gunicorn's worker timeout (default 30s) kills and restarts the worker, logging `[CRITICAL] WORKER TIMEOUT`. The pod enters a restart loop.
+Dashboards-as-code via sidecar ConfigMaps requires the ConfigMap to (a) live in a namespace the sidecar is watching, (b) carry the label the chart's sidecar is configured to watch for (default `grafana_dashboard: "1"`), and (c) be present before or shortly after Grafana's own dashboard-provider init — the sidecar (`kiwigrid/k8s-sidecar`) has a known race where Grafana's dashboard provider initializes before the sidecar finishes writing the file, so a fresh install can show "no dashboards" until a pod restart.
 
 **Why it happens:**
-The kubernetes Python client does not set a default timeout. The gunicorn `--timeout` setting (worker request timeout) measures time since the last I/O acknowledgement, not total wall-clock time — a hanging urllib3 socket does not generate I/O, so gunicorn does not detect the hang until 30s. Meanwhile every htmx `hx-trigger="every 5s"` poll lands on the stuck worker.
+The sidecar polls/watches the API server independently of Grafana's own startup; there's no built-in readiness gate between them.
 
 **How to avoid:**
-Always set `_request_timeout` on every kubernetes client call:
-```python
-v1.list_namespaced_pod(namespace="default", _request_timeout=5)
-```
-Wrap all K8s client calls in `try/except ApiException` plus a broad `except Exception` fallback that returns a degraded status dict instead of propagating exceptions to Flask's error handler. Apply an application-level timeout guard (e.g., `concurrent.futures.ThreadPoolExecutor` with `.result(timeout=5)`) if the route is ever called under htmx polling.
+Set `grafana.sidecar.dashboards.enabled: true`, `grafana.sidecar.dashboards.label: grafana_dashboard`, and `grafana.sidecar.dashboards.searchNamespace: ALL` (or the specific observability namespace — do not leave the default, which only searches Grafana's own namespace). Label every dashboard ConfigMap with `grafana_dashboard: "1"`. If dashboards don't appear after `helm install`, don't chase it as a config bug — do one `kubectl rollout restart deployment/<release>-grafana` and re-check; this is a known cold-start race on first install only.
 
 **Warning signs:**
-- `[CRITICAL] WORKER TIMEOUT` appears in gunicorn logs during cluster restarts or laptop sleep/wake
-- Dashboard becomes unresponsive when the kind cluster is paused (Docker Desktop container paused)
-- `make smoke` hangs on the dashboard endpoints after `docker pause` of the cluster
+`kubectl logs <grafana-pod> -c grafana-sc-dashboard` shows the ConfigMap being written to `/tmp/dashboards/`, but Grafana's dashboard list UI is empty.
 
-**Phase to address:** Phase: K8s API diagnostics implementation
+**Phase to address:**
+Grafana dashboards-as-code phase — smoke-test by asserting dashboard UIDs exist via Grafana's HTTP API (`/api/search?query=`) after `make observability-up`, not just eyeballing the UI once.
 
 ---
 
-### Pitfall 4: `load_incluster_config()` called at import time — app fails to start outside cluster
+### Pitfall 4: PromQL `rate()`/`increase()` windows shorter than the scrape interval return no data (blank dashboards)
 
 **What goes wrong:**
-The kubernetes client initialization is placed at module level (outside a function), like:
-```python
-# k8s_client.py — BAD
-from kubernetes import client, config
-config.load_incluster_config()   # called at import
-v1 = client.CoreV1Api()
-```
-When `conftest.py` imports `create_app`, Python imports `k8s_client.py`, which calls `load_incluster_config()`. Outside a pod, this raises `kubernetes.config.config_exception.ConfigException: Service host/port is not set.` — the entire test suite fails with an import error before a single test runs.
+Uptime/error-rate/latency panels built with something like `rate(flask_http_request_duration_seconds_count[1m])` return empty results if the effective scrape interval is 30-60s — a likely choice on a resource-trimmed local Prometheus to reduce CPU/etcd write pressure. `rate()` needs at least two samples inside its window; best practice is a window at least 4x the scrape interval.
 
 **Why it happens:**
-The pattern comes from the kubernetes Python client's example files, which show `config.load_incluster_config()` at module scope. Developers copy this pattern without accounting for the local dev / test environment where `/var/run/secrets/kubernetes.io/serviceaccount/token` doesn't exist.
+Dashboards are frequently copy-pasted from public examples assuming a 15s scrape interval; the actual scrape interval configured to reduce local resource pressure is often longer, silently breaking every rate-based panel.
 
 **How to avoid:**
-Always initialize the kubernetes client lazily inside a factory function and catch `ConfigException`:
-```python
-# k8s_client.py — CORRECT
-from kubernetes import client, config
-from kubernetes.config.config_exception import ConfigException
-
-_k8s_available = False
-_v1 = None
-
-def get_k8s_client():
-    global _k8s_available, _v1
-    if _v1 is not None:
-        return _v1, _k8s_available
-    try:
-        config.load_incluster_config()
-        _k8s_available = True
-    except ConfigException:
-        _k8s_available = False
-        return None, False
-    _v1 = client.CoreV1Api()
-    return _v1, True
-```
-Routes check `_k8s_available` and return a degraded JSON response when False. Tests mock `get_k8s_client` to return `(None, False)` without touching the cluster.
+Pick one deliberate scrape interval for the observability stack, document it (e.g. 30s), and size every `rate()`/`increase()` window to at least 4x it (2m for a 30s interval). In Grafana panels, prefer the `$__rate_interval` template variable over hardcoded windows — but only after confirming the Prometheus datasource's configured scrape interval in Grafana matches the actual value (a second, independent place this can silently drift, since Grafana's own datasource setting defaults to 15s regardless of the real cluster interval).
 
 **Warning signs:**
-- `pytest` exits immediately with `ConfigException: Service host/port is not set` before any test runs
-- `create_app()` in conftest fails with an import error from the k8s module
-- The app works when `kubectl exec`-ed into but fails on the developer's machine with `make test`
+Panels render axes/legends but no lines; querying the raw counter in Explore shows increasing values, but the `rate()`-wrapped version returns "No data."
 
-**Phase to address:** Phase: K8s API diagnostics implementation (establish the lazy-init pattern before writing any route that uses the client)
+**Phase to address:**
+Grafana dashboards-as-code phase — write the scrape interval as a single source-of-truth value (Helm value + Grafana datasource config), verified with one canary panel before building all three (uptime/latency/error-rate) dashboards.
 
 ---
 
-### Pitfall 5: Dashboard `/health` depending on downstream services causes readinessProbe cascades
+### Pitfall 5: prometheus-flask-exporter default metric names don't match "generic" dashboard examples
 
 **What goes wrong:**
-The launchpad `/health` endpoint is implemented to check: MongoDB ping + K8s API ping + field-guide-api's `/health` (HTTP call). The Helm chart's `readinessProbe` calls `/health` every 5 seconds. When the K8s API is slow (Pitfall 3) or the field-guide-api pod is restarting, `/health` blocks for up to the timeout. The readinessProbe times out (`timeoutSeconds: 3` but the upstream call takes 5s). Kubernetes marks the launchpad pod NotReady and stops routing traffic. The pod then can't be reached by anything else, including the developer trying to debug why the dashboard is down.
-
-The recursive case: if field-guide-api's `/health` also checks MongoDB, and MongoDB is briefly slow, both apps mark themselves NotReady simultaneously. The cluster appears fully broken during a routine MongoDB restart.
+`prometheus-flask-exporter` (already vendored per STACK.md) exposes metrics under its own naming convention — by default `flask_http_request_duration_seconds` (histogram) and a request-count metric, with `method`, `status`, and `path`/`endpoint` labels — not the generic `http_requests_total`/`http_request_duration_seconds` names used in most public Grafana dashboard examples and blog posts. Copy-pasting a public dashboard JSON produces panels that silently show no data because the metric name simply doesn't exist in this Prometheus.
 
 **Why it happens:**
-Developers naturally want the health endpoint to show "everything is green." The Kubernetes probe does not distinguish between "this pod is healthy" and "all services this pod depends on are healthy." Liveness and readiness probe design is often misunderstood as a system health check rather than a pod health check.
+Every Flask/instrumentation library picks its own metric prefix; there's no cross-ecosystem standard name.
 
 **How to avoid:**
-Split health semantics strictly:
-- `GET /health` (readiness): checks ONLY this pod's own dependencies — MongoDB ping with 2s timeout. Does NOT call field-guide-api. Does NOT call K8s API.
-- `GET /api/status` (platform status): checks field-guide-api reachability, K8s API, and other platform components. Returns degraded JSON gracefully when anything is slow. This endpoint is called by the dashboard's htmx status cards, NOT by the readinessProbe.
-
-The `_helpers.tpl` pattern from v1.0 already implements this correctly for field-guide-api — replicate it exactly for launchpad.
+Before writing any dashboard JSON, run `curl localhost:<port>/metrics` against a live field-guide-api/launchpad pod (or via port-forward) and copy the actual metric and label names present. Build the three dashboards (uptime/latency/error-rate) against these verified names, not a template found online.
 
 **Warning signs:**
-- `kubectl get pod launchpad-xxx` shows `0/1 READY` during a MongoDB restart
-- `kubectl describe pod launchpad-xxx` shows `Readiness probe failed: Get "http://...:8000/health": context deadline exceeded`
-- Dashboard becomes inaccessible whenever any downstream service hiccups
+Grafana panel query inspector shows the query executed but with zero series returned; Prometheus's own metric browser/autocomplete in Explore doesn't suggest the metric name typed in the panel.
 
-**Phase to address:** Phase: Launchpad app scaffold and `/health` endpoint
+**Phase to address:**
+Grafana dashboards-as-code phase — first task should be "dump real /metrics output from both apps," used as the reference for every subsequent PromQL query.
 
 ---
 
-### Pitfall 6: htmx polling + synchronous K8s API = worker starvation
+### Pitfall 6: Flask querying the in-cluster Prometheus HTTP API blocks the request-handling worker and breaks the hermetic test suite
 
 **What goes wrong:**
-The dashboard's status cards use `hx-trigger="every 5s"` to poll `/api/status`. This endpoint calls the kubernetes Python client synchronously (see Pitfall 3). With one browser tab open: 12 requests/minute. Each request that hits a slow K8s API holds the single gunicorn worker for up to the timeout. A second browser tab doubles the rate to 24/minute. The worker cannot complete one request before the next arrives. The browser shows spinners on the status cards; htmx queues requests; gunicorn logs worker timeouts; the dashboard falls over.
+Native metric cards in launchpad calling Prometheus's HTTP API (`/api/v1/query`) synchronously, without a short explicit timeout, can hang a gunicorn worker if Prometheus is unreachable/slow — with "1 worker per pod" (per STACK.md), one stuck worker means the entire dashboard becomes unresponsive, not just the metrics card. Separately, if the new code path makes a real HTTP call unconditionally, the existing hermetic 128-test suite (no kubeconfig, no cluster, established in v1.1) will either hang trying to connect or start failing outright the moment tests run with no observability stack up — a direct regression of the "additive only, v1.1 tests unchanged" hard constraint if this pattern leaks into shared code paths.
 
 **Why it happens:**
-htmx polling appears harmless in demos with fast mock responses. The danger emerges when the polled endpoint does real I/O. The `hx-trigger="every 5s"` attribute has no built-in backoff, no visibility check, and no request debouncing — it fires regardless of whether the previous request completed.
+The existing lazy-init pattern (`(None, None)` disabled signal for the K8s client, established before any route existed) was designed specifically to keep the app/tests loadable with no cluster — but a new Prometheus HTTP client is a new external dependency that must independently repeat that same discipline; it's easy to bolt on a plain `requests.get(...)` call without timeout/mocking and not notice until the test suite or a real "Prometheus down" scenario breaks in production.
 
 **How to avoid:**
-- Keep the `/api/status` K8s client call under a strict 3-second timeout (see Pitfall 3)
-- Use `hx-trigger="every 10s"` minimum — never below 5s for endpoints doing real I/O
-- Add `hx-trigger="every 10s [document.visibilityState !== 'hidden']"` to suppress polling in background tabs
-- Cache the K8s API response in-process (a module-level dict with a TTL of 8–10 seconds) so concurrent polls within the same interval don't each make a new API call
-- Alternative: use htmx load polling (`hx-trigger="load delay:10s"`) which chains requests sequentially (next fires only after previous response), preventing concurrent accumulation
+1. Mirror the existing K8s-client pattern: lazy client construction, a clear "disabled"/`None` sentinel when the observability stack isn't reachable, feeding the planned "NO SIGNAL" dimmed-panel UI state.
+2. Always pass an explicit short timeout (e.g. `timeout=2`) to every Prometheus HTTP call — never rely on library/socket defaults.
+3. In tests, mock/monkeypatch the Prometheus client the same way `k8s` is monkeypatched in `conftest.py` — assert the code never performs a real network call during `pytest`.
+4. Treat "Prometheus unreachable" as a normal, tested degraded state (like the existing outside-cluster/403/unreachable K8s branches), not an exception path that surfaces a 500.
 
 **Warning signs:**
-- `/api/status` responds fast when called directly with `curl` but the browser shows permanent spinners under normal use
-- gunicorn logs show `[CRITICAL] WORKER TIMEOUT` at the same cadence as the poll interval
-- `kubectl get pod launchpad` shows `RESTARTS: 1` after a few minutes of browser use
+`make test` starts taking noticeably longer or intermittently hangs; the dashboard page becomes slow/unresponsive specifically when the observability stack is down or not yet installed; new tests make assertions against real HTTP responses instead of mocked fixtures.
 
-**Phase to address:** Phase: htmx UI and status polling implementation
+**Phase to address:**
+Native metric cards / graceful degradation phase — the lazy-client + timeout + mock pattern should be the first thing written, before any actual query logic, exactly mirroring how the K8s client discipline was sequenced in v1.1.
 
 ---
 
-### Pitfall 7: Unbounded MongoDB activity/events feed collection
+### Pitfall 7: kube-prometheus-stack resource footprint exceeds Docker Desktop's WSL2/kind capacity, causing Pending/Evicted pods alongside the two existing app stacks
 
 **What goes wrong:**
-Every platform event (page load, service registration, status check, K8s API query) writes a document to a `platform_events` collection. There is no TTL index, no capped size, and no document limit. After a weekend of demos, the collection has 200k+ documents. `GET /api/events` does a full collection scan with no limit/sort index, taking seconds. The events page hangs. The collection's WiredTiger storage grows unbounded.
+Even "trimmed" (operator + Prometheus + Grafana + kube-state-metrics, no Alertmanager/node-exporter), kube-prometheus-stack's default resource requests can push a Docker Desktop VM already running field-guide-api + its mongo + launchpad + its mongo past its allocated memory/CPU, especially if Docker Desktop wasn't explicitly given extra RAM beyond older/lower defaults. Symptoms are pods stuck `Pending` (insufficient CPU/memory) or nodes reporting memory pressure and evicting pods intermittently — worse than a hard failure because it looks flaky rather than structurally under-resourced.
 
 **Why it happens:**
-Inserting an event document is a one-liner. Adding a TTL index is a separate step developers defer to "later" — but "later" never arrives in a local dev project. Capped collections require upfront planning because you cannot add a TTL index to a capped collection after the fact, and you cannot convert a regular collection to capped without dropping it.
+kube-prometheus-stack's chart defaults are sized for real clusters, not a single-node kind container sharing a laptop's RAM with two other app stacks; disabling Alertmanager/node-exporter cuts pod count but doesn't automatically right-size the remaining components' `resources.requests/limits`.
 
 **How to avoid:**
-Decide the retention strategy before writing the first event document:
-
-Option A (recommended): Regular collection with TTL index. At app startup (or Helm init job), create the index:
-```python
-db.platform_events.create_index("created_at", expireAfterSeconds=604800)  # 7 days
-```
-Always include `created_at: datetime.utcnow()` in every event document. Always query with `.sort("created_at", -1).limit(100)`.
-
-Option B: Capped collection (max 10k documents, 50MB):
-```python
-db.create_collection("platform_events", capped=True, size=52428800, max=10000)
-```
-Note: capped collections and TTL indexes are mutually exclusive — pick one.
-
-Both: Add a compound index on `(event_type, created_at)` to support filtered queries. Query always includes `.limit()` — never unbounded `find()`.
+Explicitly override `resources.requests`/`resources.limits` for `prometheus`, `grafana`, `kube-state-metrics`, and the operator itself in the observability values file to conservative local-dev sizes, well below the chart defaults. Document the minimum required Docker Desktop memory allocation (verify empirically on the actual dev machine and record the number, e.g. in `docs/known-limitations.md`) rather than assuming the existing setup has enough headroom.
 
 **Warning signs:**
-- `db.platform_events.count_documents({})` returns > 10k after a day of use
-- `GET /api/events` response time grows over multiple demo sessions
-- `mongomock` tests pass but real MongoDB shows slow queries under load (mongomock doesn't enforce collection size)
+`kubectl get pods -n <observability-namespace>` shows `Pending` with `kubectl describe` reporting `Insufficient cpu`/`Insufficient memory`; existing field-guide-api or launchpad pods start getting evicted or OOMKilled after the observability stack goes up, even though their own charts didn't change — the smoking gun for a shared-node resource-exhaustion regression against the additive-only constraint.
 
-**Phase to address:** Phase: Activity feed and MongoDB schema design
+**Phase to address:**
+Observability stack install phase — resource-size the values file before wiring any ServiceMonitors, and re-run `make smoke` / `smoke-launchpad` immediately after `observability-up` to catch node-level resource regressions early, per-phase, not at final milestone audit.
 
 ---
 
-## Moderate Pitfalls
-
-### Pitfall 8: Shared MongoDB — database name or collection name collision
+### Pitfall 8: kube-prometheus-stack CRDs installed via `helm install` are never upgraded by `helm upgrade`, and can hit the 262144-byte annotation limit
 
 **What goes wrong:**
-The `launchpad` app uses `mongoDbName: fieldguide` in its Helm values (copied from the field-guide-api chart) and writes service registrations to a `services` collection. The field-guide-api also happens to use a `services` collection for some future feature, or the launchpad writes to `entries` by mistake. Both apps share the same MongoDB pod. Cross-collection contamination is silent: inserts succeed, but one app reads the other's documents.
+Helm's documented behavior is that CRDs placed in a chart's `crds/` directory are installed once and are never updated or deleted by subsequent `helm upgrade`/`helm uninstall` — so re-running `make observability-up` after bumping the chart version, or an `observability-down` that doesn't explicitly clean CRDs, leaves stale CRD schemas around that can silently break new ServiceMonitor/PodMonitor fields, or produce `no matches for kind "ServiceMonitor"` errors on a fresh cluster if CRDs and the operator race during a single combined install. Separately, the Prometheus Operator's CRDs (particularly the `Prometheus` CRD) are large enough that plain `kubectl apply` (client-side apply) can hit Kubernetes's hard 262144-byte annotation limit on `last-applied-configuration`, causing an upgrade to fail outright.
 
 **Why it happens:**
-The values.yaml template pattern from v1.0 is designed to be copied. The `mongoDbName` field defaults to `fieldguide`. Developers set the launchpad chart's `mongoDbName` to `launchpad` but forget to update the runtime `MONGO_DBNAME` environment variable, or vice versa.
+This is documented, intentional Helm behavior (to avoid Helm accidentally deleting user data tied to CRDs) that surprises almost everyone the first time; the annotation-size issue is a hard Kubernetes API limit that the chart's CRDs are large enough to bump into on any repeated apply-based upgrade path.
 
 **How to avoid:**
-- The launchpad chart must have `mongoDbName: launchpad` as its default — never `fieldguide`
-- Collection names must be scoped: `platform_services`, `platform_events` in the `launchpad` database vs `entries` in the `fieldguide` database
-- If the launchpad connects to the field-guide-api's MongoDB pod (shared instance, no separate MongoDB), the MONGO_URI in the launchpad's Secret must specify `/launchpad` as the database, not `/fieldguide`
-- At startup, log `app.config["MONGO_DBNAME"]` so the developer can verify which database the app connected to
+Treat `infra/observability/` CRD lifecycle explicitly: on `observability-down`, decide deliberately whether to delete CRDs (full teardown, safe for a disposable local kind cluster) or leave them (faster subsequent `up`); document the choice, don't leave it implicit. If any Makefile target ever needs to directly `kubectl apply` a CRD (rather than relying purely on `helm install`'s automatic CRD install-once behavior), use `kubectl apply --server-side` to sidestep the annotation-size limit.
 
 **Warning signs:**
-- `db.fieldguide.entries` appears in the launchpad app's MongoDB queries (wrong database)
-- `kubectl exec -it <mongodb-pod> -- mongosh` → `db.launchpad.getCollectionNames()` returns empty despite app running
-- Field-guide-api entries disappear after launchpad writes to the same collection
+`kubectl get crd | grep monitoring.coreos.com` shows CRDs from a previous, older chart version after upgrading the chart; `helm upgrade` reports success but new CRD fields used in values.yaml have no effect; any direct `kubectl apply -f` against a Prometheus Operator CRD manifest fails with `metadata.annotations: Too long`.
 
-**Phase to address:** Phase: Launchpad app factory and MongoDB integration
+**Phase to address:**
+Observability stack install phase — decide and document the CRD teardown policy in the same PR that adds `observability-down`, not discovered later during milestone testing.
 
 ---
 
-### Pitfall 9: htmx fragment vs full-page route confusion — browser reload breaks the page
+### Pitfall 9: Pico dark reskin silently breaks the existing v1.1 forms (service catalog register/deregister, CSRF forms)
 
 **What goes wrong:**
-A route returns an HTML fragment (a `<div>` with status cards, no `<head>` or `<body>`). htmx swaps it into the DOM correctly during normal navigation. But if the user bookmarks the fragment URL, refreshes the page, or htmx pushes the fragment URL to history via `hx-push-url`, the browser loads the raw fragment on next visit — a bare `<div>` with no CSS, no JS, no layout. The page appears broken.
+Pico CSS variables must be overridden per-theme-selector (`[data-theme="dark"]` and `:root:not([data-theme="dark"])`/`@media (prefers-color-scheme: dark)`), and Pico deliberately leaves many elements without explicit background/color so they inherit from parent context. A `mission-control.css` layer added on top, if it sets colors/background at too broad a selector (e.g. `body`, `input`, `.card`) without matching Pico's own cascade/specificity, can make existing v1.1 forms (onboarding/register, deregister confirmation, CSRF-protected inputs) render with invisible text (dark-on-dark) or unreadable focus/error states — a regression the v1.1 smoke/E2E flows won't catch because they check HTTP status codes and DOM presence, not visual contrast.
 
 **Why it happens:**
-In a Jinja2 + htmx app without a JavaScript SPA router, every route must decide: does it serve a full page (extending `base.html`) or a fragment? When `hx-boost` is active, `GET` navigation returns fragments and htmx swaps them. If the same URL is hit directly (via browser address bar, curl, or htmx request error recovery), it must still return the full page. Developers write two separate routes instead of detecting the request type.
+Pico's dark-mode variables and cascade behavior are non-obvious, and a "just add a CSS file" reskin approach doesn't automatically account for every existing page/component that was built and screenshot-verified under the light Pico theme in v1.1.
 
 **How to avoid:**
-- Distinguish routes at the template level using Flask's `request.headers.get("HX-Request")` header (htmx sets this on all AJAX requests):
-```python
-@bp.route("/status")
-def status():
-    if request.headers.get("HX-Request"):
-        return render_template("_status_cards.html", ...)   # fragment only
-    return render_template("status.html", ...)              # full page wrapping the fragment
-```
-- Use a naming convention: templates prefixed with `_` are fragments never served as standalone pages
-- Do NOT use `hx-push-url` on fragment routes — only push URL when the target is a full page
-- Test by navigating directly to fragment URLs in a fresh browser tab (no htmx context)
+Use Pico's official CSS-variable override pattern (`--pico-*` variables, not raw color properties) scoped to `[data-theme="dark"]`. After the reskin, manually re-walk every existing v1.1 page (dashboard, service catalog register/view/deregister, diagnostics, activity feed) in a browser — not just automated tests — checking text contrast and focus states, since this is exactly the kind of regression automated smoke tests structurally cannot detect. Reuse the same five-screenshot verification discipline from v1.1's README requirement, but for the dark skin.
 
 **Warning signs:**
-- Page looks correct under normal navigation but broken after browser refresh
-- Fragment HTML appears as raw text in the browser when the URL is bookmarked and revisited
-- `curl http://localhost:8080/api/status` returns a bare `<div>` without `<html>` wrapper
+Existing forms visually "disappear" (dark text on dark background) even though `curl`/pytest-based tests still pass; error/validation message color no longer has sufficient contrast against the new dark background.
 
-**Phase to address:** Phase: Jinja2 template structure and htmx route design
-
----
-
-### Pitfall 10: Port collision on `make port-forward` with two services
-
-**What goes wrong:**
-The existing `make port-forward` target forwards `svc/field-guide-api` to `localhost:8080`. The developer adds a `make port-forward` for the launchpad also on port 8080. The second `kubectl port-forward` fails with `bind: address already in use` — silently when launched in the background. The developer sees the field-guide-api on 8080 and assumes the launchpad is at 8080 too, getting confused about which service they're testing.
-
-**Why it happens:**
-The Makefile has a single `port-forward` target. The developer adds a second target with the same port. Background-launched `kubectl port-forward` processes fail silently (stdout redirected to `/dev/null`).
-
-**How to avoid:**
-Assign fixed, distinct ports and document them in `make help`:
-- `port-forward-fga`: `localhost:8080` → `svc/field-guide-api:80`
-- `port-forward-launchpad`: `localhost:8081` → `svc/launchpad:80`
-
-The `make smoke` targets must use the correct port for each service. The README and `make help` documentation must clearly show which port each service uses. Add a `port-forward-all` target that starts both in the background with a verification step.
-
-**Warning signs:**
-- `make port-forward-launchpad` exits immediately with no error but no traffic reaches the service
-- `lsof -i :8080` shows two `kubectl` processes competing for the same port
-- Developer is testing the wrong service and doesn't realize it
-
-**Phase to address:** Phase: Makefile extension for second app
-
----
-
-### Pitfall 11: mongomock gap — TTL indexes and capped collections not fully supported
-
-**What goes wrong:**
-Tests use `mongomock.MongoClient()` (established pattern from v1.0). The launchpad app uses `create_index(..., expireAfterSeconds=604800)` at startup and capped collection creation. mongomock accepts these calls without error but does not enforce TTL expiration or collection size limits. Test coverage for the events feed appears to pass, but the actual behavior on real MongoDB differs: capped collections refuse inserts beyond `max` documents (unexpected for the developer who only tested with mongomock), and TTL expiration background jobs don't run during tests — the "event expires after 7 days" behavior is never tested.
-
-**Why it happens:**
-mongomock implements the MongoDB wire protocol surface but not background threads (TTL cleanup) or storage constraints (capped size). Developers assume green tests mean the production behavior is verified.
-
-**How to avoid:**
-- Write unit tests that assert the TTL index exists (check `collection.index_information()`) rather than testing expiry timing
-- Write integration tests for the events feed using a real mongo:7 container (e.g., via `pytest-docker` or a Makefile `make test-integration` target)
-- Document explicitly in `conftest.py` that mongomock does not enforce TTL or capped collection limits
-- Add a startup check in the app that logs `"platform_events TTL index: OK"` when the index exists and `"WARNING: TTL index missing"` otherwise
-
-**Warning signs:**
-- `test_event_expires_after_ttl` passes but events never disappear in the running deployment
-- A test creating a capped collection with `max=10` succeeds even when inserting 1000 documents
-- The events API returns thousands of documents despite expected TTL cleanup
-
-**Phase to address:** Phase: Activity feed implementation and test design
-
----
-
-### Pitfall 12: Second Helm chart's MongoDB — cross-chart hostname wiring mistake
-
-**What goes wrong:**
-The launchpad app is configured to connect to the existing `field-guide-api`'s MongoDB pod (rather than deploying its own). The MONGO_URI in the launchpad's Helm Secret references the MongoDB service as `field-guide-api-mongodb:27017` — correct for the service name in the `default` namespace. But if the developer uses the launchpad chart's own MongoDB hostname helper (`launchpad-mongodb`), the DNS lookup fails with `No route to host`. Alternatively, if both charts deploy their own separate MongoDB instances, the `launchpad`'s MongoDB has `mongodb.enabled: true` and the developer forgets to set `mongoDbName: launchpad`, writing to the fieldguide database instead.
-
-**Why it happens:**
-Cross-chart service references are not validated by `helm lint` or `helm upgrade`. The error only appears at runtime as a MongoDB connection failure in the pod logs.
-
-**How to avoid:**
-Decision first, then implementation: Choose ONE MongoDB instance for v1.1 (the shared field-guide-api MongoDB, or a new launchpad-owned one). Document the decision in `CONTEXT.md`. If sharing: disable MongoDB in the launchpad chart (`mongodb.enabled: false`) and supply `externalMongoUri` via `--set` pointing to `field-guide-api-mongodb:27017` — the v1.0 chart already has this `externalMongoUri` seam in `values.yaml`. If separate: set `mongoDbName: launchpad` and verify with `kubectl exec <launchpad-pod> -- env | grep MONGO` that the correct database name is injected.
-
-**Warning signs:**
-- `kubectl logs <launchpad-pod>` shows `No servers found yet, connection refused` on startup
-- `mongosh` inside the MongoDB pod shows the `launchpad` database is missing while the app claims to be writing events
-- `helm lint charts/launchpad` passes but `make smoke-launchpad` times out
-
-**Phase to address:** Phase: Launchpad Helm chart and MongoDB wiring
+**Phase to address:**
+Mission Control UI reskin phase — explicitly include a manual visual pass over every pre-existing v1.1 page as an exit criterion, not just the new Mission Control pages.
 
 ---
 
 ## Technical Debt Patterns
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Calling `load_incluster_config()` at module level | One-line K8s setup | Test suite crashes outside cluster; forces mock complexity | Never — always lazy-init inside a function |
-| `hx-trigger="every 2s"` on status cards | Snappier feeling UI | Worker starvation with >1 browser tab; masks K8s timeout problems | Never below 10s on routes doing real I/O |
-| Reusing `IMAGE`, `RELEASE`, `CHART` Makefile variables for both apps | Minimal Makefile changes | Deploying one app silently skips the other; smoke test targets wrong service | Never — namespace variables from the start |
-| Unindexed `platform_events` collection without `.limit()` | Fast to write | Full collection scan; demo slows after 1 hour of use | Never — add TTL index and `.limit()` before first insert |
-| Dashboard `/health` calling field-guide-api's `/health` | Looks like a real health check | readinessProbe cascade; dashboard goes NotReady when field-guide-api restarts | Never — liveness/readiness must be scoped to the pod's own dependencies |
-| Copying `mongoDbName: fieldguide` into the launchpad chart unchanged | Faster scaffolding | Silent data collision between two apps in shared MongoDB | Never — set `mongoDbName: launchpad` from the start |
-| Vendoring `htmx.min.js` without pinning the version in a comment | Simpler static folder | Next developer doesn't know which version is vendored; 1.x vs 2.x has breaking API changes | Acceptable if the version is documented in a comment at the top of the file |
-
----
+|----------|-------------------|-----------------|------------------|
+| `helm install --set` chains of dozens of inline flags in the Makefile for kube-prometheus-stack trimming | Fast to write, no new file | Unreadable, fragile, hard to diff in code review, easy to typo a flag silently | Never for this project — use a checked-in `infra/observability/values.yaml`, matching the existing per-chart `values.yaml` convention |
+| Skipping CRD teardown policy on `observability-down` ("just leave them, it's local") | Faster iteration during dev | Stale CRDs cause confusing "field has no effect" bugs on chart version bumps | Acceptable only if explicitly documented as a known limitation, same as v1.1's accepted-risk pattern in `docs/known-limitations.md` |
+| Committing default Grafana `admin/admin` (or similarly weak) credentials in the observability values file | No secret-management plumbing needed | Same accepted-risk category as v1.1's committed local-dev Mongo password — fine for local kind, but must be documented, never assumed "obviously fine" | Acceptable only for local kind, explicitly logged in `docs/known-limitations.md` exactly like the existing MongoDB URI precedent |
+| Hardcoding a 15s scrape interval assumption in dashboard PromQL without checking the actual configured interval | Dashboards "look done" quickly | Silent blank panels the moment scrape interval is tuned for resource savings | Never — always derive rate windows from the actual configured interval |
+| Building native metric cards with a blocking `requests.get()` and no timeout "just to get it working" | Fastest path to a working demo | One slow/unreachable Prometheus call can hang a single-worker gunicorn pod, taking down the whole dashboard | Never — timeout + mock-in-tests must be there from the first commit, per the existing lazy-client precedent |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| kubernetes Python client | No `_request_timeout` on API calls | Always pass `_request_timeout=5` to every client method call |
-| kubernetes Python client | `load_incluster_config()` at import time | Lazy-init inside `get_k8s_client()` factory; catch `ConfigException` and return disabled mode |
-| htmx polling → Flask route | Polling an endpoint that does synchronous K8s/MongoDB I/O | Keep the polled endpoint under 3s; cache K8s results for the poll interval |
-| launchpad → field-guide-api MongoDB | Using wrong service hostname (launchpad chart's own helper instead of cross-chart name) | Hard-code the shared MongoDB service name as `field-guide-api-mongodb` in launchpad's `externalMongoUri` value |
-| Jinja2 + htmx | Returning full HTML from a fragment-only route | Check `request.headers.get("HX-Request")` and return appropriate template type |
-| ServiceAccount RBAC | Using ClusterRole instead of namespace-scoped Role | Create a `Role` in the `default` namespace with only `get/list` on `pods` and `services` — no ClusterRole needed for kind local dev |
-| mongomock in tests | Assuming mongomock enforces TTL and capped collection limits | Write separate integration tests against real mongo:7 for storage-behavior tests |
-
----
+|-------------|-----------------|-------------------|
+| Prometheus Operator ServiceMonitor selector | Assuming a ServiceMonitor is auto-discovered just by existing in the cluster | Match both the `release:` label convention (or disable `serviceMonitorSelectorNilUsesHelmValues`) AND ensure `spec.selector.matchLabels` matches the target Service's labels |
+| Grafana sidecar dashboard provisioning | Assuming ConfigMaps are picked up instantly and namespace-agnostically by default | Set `sidecar.dashboards.searchNamespace` explicitly; expect a possible one-time restart on fresh install due to the known init race |
+| kube-state-metrics + kube-prometheus-stack on kind | Leaving default `kubeEtcd`/`kubeScheduler`/`kubeControllerManager`/`kubeProxy` scrape jobs enabled | Disable all four explicitly alongside the already-planned Alertmanager/node-exporter disabling |
+| Flask → in-cluster Prometheus HTTP API | Synchronous call with no timeout, no mock seam | Lazy client + explicit short timeout + "NO SIGNAL" degraded state, mirroring the existing K8s client pattern |
+| Helm CRD lifecycle across `install`/`upgrade`/`uninstall` | Assuming `helm upgrade` also upgrades CRDs | CRDs are install-once by Helm design; decide and document an explicit teardown/upgrade policy |
 
 ## Performance Traps
 
 | Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Unbounded `platform_events` query | `/api/events` takes 1–2s to load after 1 day of use | TTL index + always `.limit(100).sort("created_at", -1)` | ~10k documents (minutes on a demo) |
-| htmx poll interval below 10s on I/O-bound route | Browser spinner; gunicorn timeouts; worker CRITICAL messages | Minimum 10s poll + visibility check + in-process cache | First time a second browser tab is opened |
-| K8s client without timeout on `/api/status` | Dashboard hangs when cluster paused; readinessProbe failures | `_request_timeout=5` on all calls; module-level result cache with 10s TTL | First laptop sleep/wake cycle during a demo |
-| Flask `render_template` with large context objects | HTML generation slow for events feed | Paginate: never pass >100 events to a template; use `.limit()` in the query | ~500 events in the template context |
-
----
+|------|----------|------------|-----------------|
+| Default (unsized) Prometheus/Grafana/kube-state-metrics resource requests on a shared kind node | Pods `Pending`/evicted, other app pods start getting OOMKilled | Explicitly right-size `resources.requests/limits` for all four remaining components in the trimmed stack | The moment the observability stack is installed alongside both existing app+mongo pairs on default Docker Desktop memory allocation |
+| Short PromQL rate windows vs. actual scrape interval | Blank/"No data" panels despite metrics existing | Size rate windows to ≥4x scrape interval; keep Grafana datasource scrape-interval setting in sync with the real value | As soon as the scrape interval is tuned above 15s for resource savings |
+| Unbounded/leftover port-forward processes from previous dev sessions | New `make port-forward-grafana`/`observability-up` runs fail with "address already in use" on 3000/9090/8080/8081 | Makefile target should kill any prior port-forward on the target port before starting a new one (mirroring whatever pattern the existing `port-forward` target for field-guide-api/launchpad already uses) | Any time a prior session wasn't cleanly torn down — common on Windows where Ctrl+C in Git Bash doesn't always kill background `kubectl port-forward` children |
 
 ## Security Mistakes
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| ClusterRole instead of namespace-scoped Role for launchpad ServiceAccount | If launchpad pod is compromised, attacker gets read access to all namespaces, all clusters | Use `Role` (namespace-scoped), not `ClusterRole`; bind only to `default` namespace |
-| ServiceAccount token auto-mounted on field-guide-api pod | Field-guide-api doesn't need K8s API access; token is an unnecessary attack surface | Set `automountServiceAccountToken: false` in the field-guide-api Helm chart Deployment spec |
-| Committing `apps/launchpad/.env` with MongoDB URI before `.gitignore` covers new app dir | Credentials in git history | Verify `.gitignore` covers `apps/launchpad/.env` before first commit in that directory |
-| Kubernetes RBAC verbs `*` on pods | Any pod operation (delete, exec) possible from inside launchpad pod | Restrict to `verbs: ["get", "list", "watch"]` only — no `create`, `delete`, `exec` |
-
----
+| Committing a real/production-looking Grafana admin password instead of an obviously-local-dev placeholder | Looks like a leaked credential to anyone scanning the repo, even though it's local-only | Follow the exact precedent already set for MongoDB in v1.1: an obviously-fake local value, documented as an accepted risk in `docs/known-limitations.md` |
+| Exposing Prometheus/Grafana via a NodePort or LoadBalancer "for convenience" instead of port-forward | Unnecessarily widens local attack surface on a Windows host with other things listening on the network | Keep observability access to `kubectl port-forward` (via the planned `port-forward-grafana` target) — consistent with how field-guide-api/launchpad are already accessed |
+| Prometheus HTTP API called from launchpad without validating/sanitizing any user-influenced query fragments (e.g. a future feature letting a user pick a service name to build a query) | PromQL injection into label matchers | Keep all v2.0 queries as fixed, code-defined PromQL strings with parameterized label values (never string-concatenate user input directly into a PromQL query) |
 
 ## UX Pitfalls
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| htmx status card shows spinner during every 5s poll | Dashboard flickers every 5 seconds; feels broken | Use `hx-indicator` on a small spinner icon, not the entire card; swap only the inner data, not the card shell |
-| Degraded K8s status shown as a red error state | Reviewer thinks the platform is broken when the cluster is just local | Use a "degraded" yellow state with message "K8s API unavailable — running outside cluster" for graceful fallback |
-| Events feed shows raw timestamps (UTC epoch) | Hard to read during a demo | Format as relative time ("2 minutes ago") in Jinja2 using a custom filter |
-| Service registration form accepts empty names | Invalid data in MongoDB; confusing list state | Client-side required attribute + server-side validation before insert |
-
----
+| Native metric cards show a raw error/traceback when Prometheus isn't installed yet | Looks broken, undermines "portfolio quality" first impression | Dimmed "NO SIGNAL" panel state, exactly as already planned — make sure it's the first thing built, not a fallback bolted on after the happy path |
+| Grafana deep links ("Open in Grafana") pointing to a URL that requires port-forward the reviewer hasn't set up | Dead link on first click, confusing | Document in the README that Grafana access requires `make port-forward-grafana` first; keep the deep link's port consistent with the Makefile target's convention |
+| Dark reskin applied inconsistently — new Mission Control pages look polished, existing v1.1 pages (register/catalog/diagnostics) look untouched/mismatched | Jarring, unfinished-looking product for a portfolio piece | Explicitly re-skin/verify every existing v1.1 page under the new dark theme as an exit criterion, not just new pages |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **K8s client graceful degradation:** `make test` passes with zero kubernetes calls; `KUBERNETES_SERVICE_HOST` is unset and the dashboard still starts
-- [ ] **MongoDB database isolation:** `kubectl exec <mongodb-pod> -- mongosh --eval "db.adminCommand({listDatabases:1})"` shows both `fieldguide` and `launchpad` as separate databases
-- [ ] **htmx fragment safety:** Direct browser navigation to `/api/status` (no htmx context) returns a usable full page, not a bare div
-- [ ] **Events TTL index:** `db.launchpad.platform_events.getIndexes()` shows a TTL index on `created_at`; queries always use `.limit()`
-- [ ] **Port-forward isolation:** `make port-forward-launchpad` uses port 8081, not 8080; both port-forward targets can run simultaneously without conflict
-- [ ] **Makefile target clarity:** `make build` alone fails with a helpful error or does not exist — must be `make build-fga` or `make build-launchpad`
-- [ ] **RBAC scope:** `kubectl get role -n default` shows a namespace-scoped Role for launchpad; `kubectl get clusterrole | grep launchpad` returns nothing
-- [ ] **Worker timeout resilience:** Kill the kind API server process (`docker pause kind-control-plane`) and confirm the dashboard responds with a degraded status within 6s, not a hung worker
-- [ ] **Poll visibility:** Opening a second browser tab does not double the gunicorn request rate — verify with `kubectl logs -f <launchpad-pod>` while switching between two open tabs
-
----
+- [ ] **ServiceMonitors created:** Often missing the `release:` label match or a Service-label mismatch — verify with the Prometheus UI's Service Discovery/Targets page showing `up{job=...} == 1`, not just `kubectl get servicemonitor` succeeding.
+- [ ] **Grafana dashboards provisioned:** Often show up in the ConfigMap/sidecar logs but not in the Grafana UI after a fresh install — verify via Grafana's own dashboard search API, and confirm at least one panel renders non-blank data (not just "the JSON imported").
+- [ ] **"Trimmed" kube-prometheus-stack:** Often still leaves `kubeEtcd`/`kubeScheduler`/`kubeControllerManager`/`kubeProxy` scrape jobs enabled by default even after disabling Alertmanager/node-exporter — verify the Targets page has zero permanently-down jobs.
+- [ ] **Native metric cards with graceful degradation:** Often only tested in the "everything up" happy path — verify the "NO SIGNAL" state actually renders (stop the observability stack and reload the dashboard) and that it doesn't hang the request.
+- [ ] **`make seed-demo` idempotency:** Often only tested once from an empty database — verify running it twice in a row doesn't create duplicate catalog entries or duplicate activity-feed rows (check for a natural idempotency key or an existence check before each API call it drives).
+- [ ] **Additive-only constraint:** Often "verified" by eyeballing that old files weren't touched — verify by literally re-running the full v1.1 smoke suite (`make smoke`, `smoke-launchpad`) after every v2.0 phase, not just at the final milestone audit.
+- [ ] **Windows/Git Bash compatibility of new Makefile targets:** Often only tested by the person who wrote them in whatever shell they happen to be in — verify every new target (`observability-up`, `port-forward-grafana`, `seed-demo`, `up-mission-control`) explicitly in Git Bash on the actual Windows dev machine, watching for MSYS path-mangling on any argument that looks like an absolute path (e.g. `/api/v1/query`, label selectors starting with `/`).
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Makefile variable collision discovered mid-milestone | MEDIUM | Rename variables to namespaced form; update all targets; run `make up` end-to-end to verify |
-| Selector label collision (wrong pods behind Service) | MEDIUM | `helm uninstall` both releases; fix `_helpers.tpl`; `helm install` in order; verify endpoints |
-| K8s client hanging workers discovered in demo | LOW | Add `_request_timeout=5` to all client calls; restart pod; no data loss |
-| `platform_events` collection unbounded (already has 100k docs) | MEDIUM | Create TTL index (`create_index` on existing collection is non-blocking on small datasets); add `.limit()` to all queries; consider a one-time cleanup script |
-| MongoDB database collision (launchpad wrote to `fieldguide`) | HIGH | Drop contaminated collections in `fieldguide`; fix `mongoDbName` in chart values; redeploy; accept data loss (local kind only) |
-| Fragment URL bookmarked without full-page fallback | LOW | Add `HX-Request` check to route; no data loss; retested in 10 minutes |
-| `load_incluster_config()` at module level blocking tests | LOW | Move to lazy factory function; tests unblocked immediately |
-
----
+|---------|---------------|-----------------|
+| Stale/orphaned Prometheus Operator CRDs after a chart version bump | LOW (disposable local kind cluster) | `kind delete cluster` + recreate, or explicitly `kubectl delete crd -l app.kubernetes.io/part-of=kube-prometheus-stack` before reinstalling |
+| ServiceMonitor silently not discovered | LOW | Fix label(s), `kubectl apply` again — Prometheus Operator reconciles on the next sync loop within seconds, no restart needed |
+| Grafana dashboards not appearing after fresh install | LOW | One `kubectl rollout restart deployment/<release>-grafana`; if still missing, check sidecar container logs for the ConfigMap label mismatch |
+| Node resource exhaustion causing existing app pods to be evicted | MEDIUM | `helm uninstall` the observability release, increase Docker Desktop memory allocation, re-apply trimmed `resources.requests/limits`, reinstall |
+| Dark reskin breaks an existing v1.1 form's readability | MEDIUM | Isolate the offending Pico variable override, scope it more narrowly (component-level class instead of global selector), re-verify against all five original v1.1 screenshots |
+| `make test` starts hanging due to an un-mocked live Prometheus HTTP call | LOW-MEDIUM | Add the missing `conftest.py` monkeypatch for the Prometheus client, add an explicit timeout to the underlying call as defense-in-depth |
 
 ## Pitfall-to-Phase Mapping
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Makefile variable collision | Phase: Monorepo scaffold — first task before any code | `make help` shows namespaced targets; `make deploy-fga` and `make deploy-launchpad` deploy distinct releases |
-| Helm Service selector collision | Phase: Launchpad Helm chart scaffold | `kubectl get endpoints` shows correct pod IPs for each Service |
-| K8s client blocking gunicorn worker | Phase: K8s API diagnostics | `_request_timeout=5` present on all client calls; confirmed via code review |
-| `load_incluster_config` at import time | Phase: K8s API diagnostics — establish lazy-init factory first | `make test` passes without `KUBERNETES_SERVICE_HOST` set |
-| Dashboard `/health` cascading failure | Phase: Launchpad app scaffold + `/health` endpoint | `/health` only pings MongoDB; `/api/status` is separate and not probed |
-| htmx polling + K8s I/O starvation | Phase: htmx UI and status polling | Poll interval ≥ 10s; visibility guard present; confirmed by log inspection |
-| Unbounded events collection | Phase: Activity feed and MongoDB schema | TTL index confirmed in mongosh; `.limit()` in all queries; tests assert index existence |
-| Shared MongoDB DB name collision | Phase: Launchpad app factory | `app.config["MONGO_DBNAME"]` logs `launchpad` not `fieldguide` on startup |
-| htmx fragment vs full-page confusion | Phase: Jinja2 template structure | Direct browser navigation to fragment URLs returns full page |
-| Port-forward collision | Phase: Makefile extension | Both port-forward targets run simultaneously on distinct ports |
-| mongomock gap for TTL/capped | Phase: Activity feed test design | `conftest.py` documents limitation; index existence test added |
-| Cross-chart MongoDB hostname wiring | Phase: Launchpad Helm chart and MongoDB wiring | `kubectl exec <launchpad-pod> -- env | grep MONGO` shows correct URI |
-
----
+| Etcd/kubelet/scheduler/controller-manager scrape noise | Observability stack install phase | Prometheus Targets page shows zero permanently-down jobs after install |
+| ServiceMonitor release-label / selector mismatch | ServiceMonitor/scraping phase | `up{job="field-guide-api"}` and `up{job="launchpad"}` both return `1` in Prometheus |
+| Grafana sidecar dashboard discovery | Grafana dashboards-as-code phase | Grafana dashboard search API returns the provisioned dashboard UIDs post-install |
+| PromQL rate() window vs scrape interval | Grafana dashboards-as-code phase | One canary rate-based panel renders non-blank data before building all three dashboards |
+| prometheus-flask-exporter metric name mismatch | Grafana dashboards-as-code phase | PromQL queries built only from a real `/metrics` dump, not a public template |
+| Flask→Prometheus blocking calls / hermetic test breakage | Native metric cards / graceful degradation phase | `make test` runtime unchanged and passes with zero live network calls; manual "stop observability, reload page" check doesn't hang |
+| Resource exhaustion on shared kind node | Observability stack install phase | `make smoke` + `smoke-launchpad` pass immediately after `observability-up`, not just at milestone end |
+| CRD install/upgrade/teardown ordering | Observability stack install phase | `observability-down` behavior (CRD kept vs. deleted) is documented and repeatable across two consecutive up/down cycles |
+| Pico dark reskin breaking existing forms | Mission Control UI reskin phase | Manual visual re-walk of all pre-existing v1.1 pages under the new theme, screenshot-compared |
+| Windows Git Bash / MSYS path mangling in new Makefile targets | Additive Makefile targets phase | Every new target explicitly exercised in Git Bash on the real Windows dev machine, not just WSL2 |
+| `make seed-demo` non-idempotency | Demo seeding phase | Running `make seed-demo` twice produces no duplicate catalog/activity-feed entries |
 
 ## Sources
 
-- v1.0 Makefile (`E:/Genspark/k8s-launchpad/Makefile`) — existing variable/target names that would collide
-- v1.0 `_helpers.tpl` (`charts/field-guide-api/templates/_helpers.tpl`) — selectorLabels pattern that must be replicated, not shared
-- v1.0 `conftest.py` — mongomock monkeypatching pattern; basis for K8s client mock strategy
-- v1.0 `health.py` — readiness probe design pattern: scope to own MongoDB, not downstream services
-- v1.0 `app/__init__.py` — app factory pattern; kubernetes client must follow same lazy-init discipline
-- [kubernetes-client/python: in_cluster_config.py example](https://github.com/kubernetes-client/python/blob/master/examples/in_cluster_config.py) — shows absence of fallback handling; ConfigException documented in issue #992
-- [kubernetes-client/python: timeout-settings.md](https://github.com/kubernetes-client/python/blob/master/examples/watch/timeout-settings.md) — `_request_timeout` is the correct parameter; no default means infinite wait
-- [htmx hx-trigger attribute docs](https://htmx.org/attributes/hx-trigger/) — `every` polling syntax; HTTP 286 stop-polling mechanism; no built-in visibility guard
-- [htmx template fragments essay](https://htmx.org/essays/template-fragments/) — fragment vs full-page route design
-- [htmx hx-boost fragment issue #497](https://github.com/bigskysoftware/htmx/discussions/2543) — browser restore of fragment URLs as broken page
-- [MongoDB TTL Indexes official docs v7.0](https://www.mongodb.com/docs/v7.0/core/index-ttl/) — TTL index behavior, 60s background cleanup cadence
-- [MongoDB Capped Collections](https://www.mongodb.com/docs/manual/core/capped-collections/) — mutual exclusivity with TTL indexes
-- [API health checks for graceful vs cascading failure](https://klotzandrew.com/blog/api-health-checks-for-graceful-or-cascading-failure/) — cascading failure pattern documented
-- [Kubernetes RBAC Good Practices](https://kubernetes.io/docs/concepts/security/rbac-good-practices/) — Role vs ClusterRole; automountServiceAccountToken
-- [mongomock unit test pattern — flask-mongomock-example](https://github.com/alkc/flask-mongomock-example) — confirmed mongomock does not enforce TTL or capped constraints
-- [gunicorn worker timeout issues](https://github.com/benoitc/gunicorn/issues/1655) — blocking IO (no client timeout) not detected by gunicorn until `--timeout` fires
+- [prometheus-community/helm-charts #2381 — ServiceMonitor wrong labels for kube-state-metrics](https://github.com/prometheus-community/helm-charts/issues/2381) — MEDIUM
+- [prometheus-community/helm-charts #3131 — Grafana missing label release: prometheus](https://github.com/prometheus-community/helm-charts/issues/3131) — MEDIUM
+- [prometheus-community/helm-charts #1513 — serviceMonitorSelector causes queries to fail](https://github.com/prometheus-community/helm-charts/issues/1513) — MEDIUM
+- [Prometheus Operator troubleshooting docs](https://prometheus-operator.dev/docs/platform/troubleshooting/) — HIGH (official docs)
+- [Grafana helm-charts #527 — sidecar init race with dashboard provider](https://github.com/grafana/helm-charts/issues/527) — MEDIUM
+- [Fabian Lee — Prometheus: adding a Grafana dashboard via ConfigMap](https://fabianlee.org/2022/07/06/prometheus-adding-a-grafana-dashboard-using-a-configmap/) — MEDIUM
+- [linkerd2 #7978 — charts not displaying data when duration < scrape interval](https://github.com/linkerd/linkerd2/issues/7978) — MEDIUM
+- [Grafana Labs blog — $__rate_interval for Prometheus rate queries](https://grafana.com/blog/2020/09/28/new-in-grafana-7.2-__rate_interval-for-prometheus-rate-queries-that-just-work/) — HIGH (official)
+- [prometheus/prometheus #3194 — rate()[1m] does not return data](https://github.com/prometheus/prometheus/issues/3194) — MEDIUM
+- [kube-prometheus-stack CRD "no matches for kind" — helm-charts #1564, #2217, #2035](https://github.com/prometheus-community/helm-charts/issues/1564) — MEDIUM
+- [helm/charts #9241 — CRD validation fails despite CRDs present](https://github.com/helm/charts/issues/9241) — MEDIUM
+- [prometheus-community/helm-charts #1500 — CRD upgrade "Too long: must have at most 262144 bytes"](https://github.com/prometheus-community/helm-charts/issues/1500) — MEDIUM
+- [Arthur Koziel — Fixing ArgoCD "Too long" CRD error (server-side apply)](https://www.arthurkoziel.com/fixing-argocd-crd-too-long-error/) — MEDIUM
+- [prometheus-operator/kube-prometheus discussion #790 — node-exporter CrashLoopBackOff on Docker Desktop mount propagation](https://github.com/prometheus-operator/kube-prometheus/discussions/790) — MEDIUM (confirms why node-exporter is correctly disabled per project decision)
+- [kind known issues docs](https://kind.sigs.k8s.io/docs/user/known-issues/) — HIGH (official)
+- [benoitc/gunicorn #2020, #1801 — worker timeout on slow outbound HTTP calls](https://github.com/benoitc/gunicorn/issues/2020) — MEDIUM
+- [Pico CSS official docs — CSS variables and color-scheme theming](https://picocss.com/docs/css-variables) — HIGH (official)
+- [Pico CSS official docs — Color schemes](https://picocss.com/docs/color-schemes) — HIGH (official)
+- [todzhang.com — Git Bash MSYS path-conversion pitfall for kubectl/minikube-style CLIs](https://www.todzhang.com/blogs/tech/en/minikube-windows-path-pitfall) — MEDIUM
+- Project's own established precedents (lazy K8s client `(None, None)` pattern, hermetic 128-test suite, accepted-risk documentation convention) — HIGH (from `.planning/PROJECT.md`, first-party)
 
 ---
-*Pitfalls research for: Flask+htmx dashboard + K8s API diagnostics + shared MongoDB (k8s-launchpad v1.1 Product Dashboard)*
-*Researched: 2026-07-08*
+*Pitfalls research for: k8s-launchpad v2.0 Observability + Mission Control milestone*
+*Researched: 2026-07-16*
