@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Observability + Mission Control
-status: planning
-last_updated: "2026-07-15T21:28:42.878Z"
-last_activity: 2026-07-15
+status: roadmap-ready
+last_updated: "2026-07-16T00:00:00.000Z"
+last_activity: 2026-07-16
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-14 after v1.1 milestone)
+See: .planning/PROJECT.md (updated 2026-07-16 after v2.0 requirements + research)
 
-**Core value:** `make up-all` brings up the kind cluster and both apps (field-guide-api + launchpad dashboard), making the platform demoable to a human reviewer in a browser at localhost:8081
-**Current focus:** Planning next milestone (PRD-2 GitOps candidate)
+**Core value:** `make up-mission-control` brings up the cluster, both apps, the observability stack, and seeded demo data — the platform demos as a production-grade control room with real telemetry
+**Current focus:** Phase 11 — Observability Stack Install (first phase of v2.0)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-07-15 — Milestone v2.0 started
+Phase: 11 of 17 (Observability Stack Install)
+Plan: — (not yet planned)
+Status: Roadmap ready — awaiting /gsd:plan-phase 11
+Last activity: 2026-07-16 — Roadmap created for v2.0 (7 phases, 19/19 requirements mapped)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -41,32 +43,43 @@ Last activity: 2026-07-15 — Milestone v2.0 started
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table (v1.1 outcomes recorded at milestone close).
-Full v1.1 decision log archived with the milestone: milestones/v1.1-ROADMAP.md and phase SUMMARY.md files.
+Decisions are logged in PROJECT.md Key Decisions table. v2.0-relevant decisions already recorded there (pending outcome):
+- v2.0 = PRD-4 observability before PRD-2 GitOps
+- Trimmed kube-prometheus-stack (no Alertmanager/node-exporter/kubeadm scrape jobs)
+- ServiceMonitors live in `infra/observability/`, not in app charts
+- Native Prometheus-fed metric cards over Grafana iframes
+- Mission Control skin = Pico dark + `mission-control.css` layer
+- Grafana dashboards-as-code via sidecar ConfigMaps
+- Demo seeding via idempotent `make seed-demo` through existing APIs
 
 ### Pending Todos
 
-None — v1.1 closed with 0 open artifacts. Tech debt (6 INFO/WARNING items) tracked in milestones/v1.1-MILESTONE-AUDIT.md.
+None yet for v2.0.
 
 ### Blockers/Concerns
 
-None open. All v1.1 research flags were resolved during the milestone (Phase 8 token/RBAC branches, Phase 7 htmx visibility guard, Phase 9 TTL live-only verification — documented in docs/known-limitations.md).
+- Research flag: Phase 11 needs a live resource-footprint check on the actual dev machine's Docker Desktop allocation before finalizing `values-trimmed.yaml` — treat as starting point, not final answer.
+- Research flag: Phase 13 needs a live `/metrics` dump from both apps before authoring any PromQL — do not build dashboards from public templates alone.
+- CRD teardown policy for `observability-down` needs an explicit decision during Phase 11 planning, documented in docs/known-limitations.md per existing accepted-risk convention.
 
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| PRD-2 | ArgoCD GitOps (GITOPS-01) | Deferred | PRD-1 start |
+| v2.1 | Loki/log aggregation (LOKI-01) | Deferred | v2.0 requirements definition |
+| v2.1 | Alertmanager + notification rules (ALERT-01) | Deferred | v2.0 requirements definition |
+| v2.1 | SLO burn-rate panels (SLO-01) | Deferred | v2.0 requirements definition |
+| PRD-2 | ArgoCD GitOps (GITOPS-01) | Deferred | PRD-1 start; reordered after v2.0 |
 | PRD-3 (later) | Real deploy pipeline behind onboard form (PLAT-01) | Deferred | v1.1 start |
-| PRD-4 | Prometheus/Grafana/Loki/Trivy (OBS-01, OBS-02) | Deferred | PRD-1 start |
 | Final | AWS/EKS/Terraform (CLOUD-01) | Deferred | PRD-1 start |
 
 ## Session Continuity
 
-Last session: 2026-07-14
-Stopped at: Milestone v1.1 completed, archived, and tagged
-Resume file: none — start the next milestone with /gsd-new-milestone
+Last session: 2026-07-16
+Stopped at: v2.0 ROADMAP.md written (Phases 11-17), REQUIREMENTS.md traceability updated, 19/19 requirements mapped
+Resume file: none — next step is /gsd:plan-phase 11
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Review .planning/ROADMAP.md Phase 11-17 details
+- Run `/gsd:plan-phase 11` to begin planning the Observability Stack Install phase

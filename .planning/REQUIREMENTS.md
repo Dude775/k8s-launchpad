@@ -82,31 +82,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| OBS-01 | — | Pending |
-| OBS-02 | — | Pending |
-| OBS-03 | — | Pending |
-| GRAF-01 | — | Pending |
-| GRAF-02 | — | Pending |
-| GRAF-03 | — | Pending |
-| GRAF-04 | — | Pending |
-| UI-06 | — | Pending |
-| UI-07 | — | Pending |
-| UI-08 | — | Pending |
-| UI-09 | — | Pending |
-| UI-10 | — | Pending |
-| UI-11 | — | Pending |
-| DIAG-03 | — | Pending |
-| MAKE-03 | — | Pending |
-| MAKE-04 | — | Pending |
-| MAKE-05 | — | Pending |
-| MAKE-06 | — | Pending |
-| DOCS-02 | — | Pending |
+| OBS-01 | Phase 11 | Pending |
+| OBS-02 | Phase 11 | Pending |
+| OBS-03 | Phase 12 | Pending |
+| GRAF-01 | Phase 13 | Pending |
+| GRAF-02 | Phase 13 | Pending |
+| GRAF-03 | Phase 13 | Pending |
+| GRAF-04 | Phase 13 | Pending |
+| MAKE-03 | Phase 14 | Pending |
+| UI-08 | Phase 15 | Pending |
+| UI-09 | Phase 15 | Pending |
+| UI-10 | Phase 15 | Pending |
+| UI-11 | Phase 15 | Pending |
+| DIAG-03 | Phase 15 | Pending |
+| UI-06 | Phase 16 | Pending |
+| UI-07 | Phase 16 | Pending |
+| MAKE-04 | Phase 17 | Pending |
+| MAKE-05 | Phase 17 | Pending |
+| MAKE-06 | Phase 17 | Pending |
+| DOCS-02 | Phase 17 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 19 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 19 ⚠️ (expected before roadmap)
+- Mapped to phases: 19 (Phases 11-17)
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-16*
-*Last updated: 2026-07-16 after initial definition*
+*Last updated: 2026-07-16 after roadmap creation (v2.0 roadmap: 7 phases, 100% coverage)*
