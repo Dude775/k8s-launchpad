@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Observability + Mission Control
-status: executing
-stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-07-16T16:07:56.184Z"
+status: ready_to_plan
+stopped_at: Phase 11 complete (4/4) — ready to discuss Phase 12
+last_updated: 2026-07-16T16:27:39.140Z
 last_activity: 2026-07-16 -- Phase 11 execution started
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 18
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16 after v2.0 requirements + research)
 
 **Core value:** `make up-mission-control` brings up the cluster, both apps, the observability stack, and seeded demo data — the platform demos as a production-grade control room with real telemetry
-**Current focus:** Phase 11 — observability-stack-install
+**Current focus:** Phase 12 — servicemonitor scraping
 
 ## Current Position
 
-Phase: 11 (observability-stack-install) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 11
-Last activity: 2026-07-16 -- Phase 11 execution started
+Phase: 12
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-16
 
 Progress: [██████████] 100%
 
