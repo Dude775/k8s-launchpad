@@ -18,8 +18,14 @@ KCTX='--context=kind-kind'
 # CRDs on uninstall by design, and Phase 12's ServiceMonitors depend on them
 # staying installed. This is intentional per D-01 (see docs/known-limitations.md).
 echo "==> Uninstalling Helm release kube-prometheus-stack (namespace: observability)..."
-if helm status kube-prometheus-stack -n observability "${KCTX}" &>/dev/null; then
-  helm uninstall kube-prometheus-stack -n observability "${KCTX}"
+# NOTE: Helm's context flag is `--kube-context`, NOT `--context` (that is a kubectl-only
+# flag). Using the shared `${KCTX}` (`--context=kind-kind`) here — as originally written —
+# is an unrecognized Helm flag that makes every `helm status`/`helm uninstall` call error
+# out silently under `&>/dev/null`, so the `if` always took the "not found" branch and
+# `helm uninstall` never actually ran. Fixed to build a Helm-specific context flag.
+HELM_KCTX='--kube-context=kind-kind'
+if helm status kube-prometheus-stack -n observability ${HELM_KCTX} &>/dev/null; then
+  helm uninstall kube-prometheus-stack -n observability ${HELM_KCTX}
   echo "    Release uninstalled."
 else
   echo "    Release not found — skipping."

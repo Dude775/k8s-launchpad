@@ -82,25 +82,46 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update prometheus-community
 
 # ── Step 2: Install/upgrade trimmed kube-prometheus-stack ───────────────────
+# NOTE: `--wait` is deliberately NOT used here. On this dev environment (Windows +
+# Docker Desktop + kind), Helm's --wait implementation opens a long-lived watch
+# connection to the API server through Docker Desktop's port-forward proxy, which
+# hangs indefinitely (confirmed live: 0 forward progress, ~0s CPU growth over 20+
+# minutes, two independent hangs reproduced) — the proxy does not reliably deliver
+# watch/chunked-transfer responses. Plain polling GETs (used in Step 3 below) do
+# not hit this issue. See docs/known-limitations.md.
 echo "==> Step 2: Installing/upgrading trimmed kube-prometheus-stack..."
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   --version 87.16.1 \
   --namespace observability --create-namespace \
   -f infra/observability/values-trimmed.yaml \
-  --wait --timeout 300s
+  --timeout 300s
 
 # ── Step 3: Readiness self-check (D-06) ──────────────────────────────────────
 # The chart also creates a short-lived admission-webhook patch Job whose pod
-# reaches Succeeded (not Ready) — exclude Succeeded-phase pods so the wait
-# doesn't trip on it.
+# reaches Succeeded (not Ready) — exclude Succeeded-phase pods so the check
+# doesn't trip on it. Uses polling `kubectl get` (not `kubectl wait`/watch) —
+# see the Step 2 note above on why watch-based waits hang in this environment.
 echo "==> Step 3: Verifying observability pods are Running/Ready..."
-if ! kubectl ${KCTX} wait --for=condition=Ready pod --all -n "${NAMESPACE}" \
-     --field-selector=status.phase!=Succeeded --timeout=180s; then
-  echo "ERROR: observability pods failed to become Ready — describing not-ready pods:"
-  kubectl ${KCTX} get pods -n "${NAMESPACE}" --field-selector=status.phase!=Running,status.phase!=Succeeded -o name | \
-    xargs -r -n1 kubectl ${KCTX} describe -n "${NAMESPACE}"
-  exit 1
-fi
+READY_DEADLINE=$(( $(date +%s) + 180 ))
+while true; do
+  NOT_READY=$(kubectl ${KCTX} get pods -n "${NAMESPACE}" \
+    --field-selector=status.phase!=Succeeded \
+    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{" "}{range .status.containerStatuses[*]}{.ready}{","}{end}{"\n"}{end}' 2>/dev/null | \
+    grep -v -E ' Running (true,)+$' || true)
+  POD_COUNT=$(kubectl ${KCTX} get pods -n "${NAMESPACE}" --field-selector=status.phase!=Succeeded --no-headers 2>/dev/null | wc -l)
+  if [ "$POD_COUNT" -gt 0 ] && [ -z "$NOT_READY" ]; then
+    echo "    All ${POD_COUNT} observability pod(s) Running/Ready."
+    break
+  fi
+  if [ "$(date +%s)" -ge "$READY_DEADLINE" ]; then
+    echo "ERROR: observability pods failed to become Ready within 180s — describing not-ready pods:"
+    kubectl ${KCTX} get pods -n "${NAMESPACE}" -o wide
+    kubectl ${KCTX} get pods -n "${NAMESPACE}" --field-selector=status.phase!=Running,status.phase!=Succeeded -o name | \
+      xargs -r -n1 kubectl ${KCTX} describe -n "${NAMESPACE}"
+    exit 1
+  fi
+  sleep 5
+done
 
 # ── Step 4: Additive-only re-verification (D-06) ─────────────────────────────
 echo "==> Step 4: Re-verifying v1.1 apps are unaffected..."

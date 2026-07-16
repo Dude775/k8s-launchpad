@@ -94,6 +94,41 @@ manually:
 kubectl delete crd -l app.kubernetes.io/part-of=kube-prometheus-stack
 ```
 
+### Measured observability headroom: live Phase 11 install (2026-07-16)
+First live-measured resource-headroom number, captured from `scripts/observability-up.sh`'s
+Step 0 preflight check on a freshly-provisioned kind cluster (control-plane node, before the
+observability stack existed) with both v1.1 apps (`field-guide-api`, `launchpad`) already
+deployed via `make up-all`:
+
+```
+Allocatable: 10184928Ki (~9.71 GiB) | Already requested: 559104Ki (~546 MiB) | Headroom: 9625824Ki (~9.18 GiB) | Stack needs: 528384Ki (~516 MiB)
+```
+
+After install, the trimmed stack's actual scheduled memory requests summed from the live pods
+(`kubectl get pods -n observability -o jsonpath=...requests.memory`) came to **484 MiB**
+(Grafana 128Mi + Prometheus 256Mi + the operator 100Mi; `kube-state-metrics` and the two
+Grafana sidecars run without an explicit memory request, i.e. BestEffort for that dimension) —
+close to the ~516Mi estimate baked into the script's preflight comment, confirming this dev
+machine's Docker Desktop allocation (9.71 GiB node-allocatable) has ample headroom (~9.18 GiB)
+for the trimmed stack. This is a starting-point measurement per the STATE.md Phase 11 blocker
+note, not a hard budget — re-measure if Docker Desktop's memory allocation changes.
+
+### Windows/Docker Desktop: `helm --wait` and watch-based waits hang on this kind setup
+Live-verified during Phase 11 Plan 03: `helm upgrade --install ... --wait --timeout 300s`
+against this Windows host + Docker Desktop + kind cluster hangs indefinitely — reproduced twice,
+each time with the `helm.exe` process accruing well under 3 seconds of CPU time over 20+ minutes
+of wall-clock time while holding an established (but silently stalled) TCP connection to the
+kind API server's host-mapped port. Killing the process, cleaning up the pending release, and
+re-running `helm upgrade --install` **without** `--wait` completes normally in well under two
+minutes; a plain polling `kubectl get pods` loop (no `--watch`, no `kubectl wait`) then confirms
+readiness reliably. The working theory is that Docker Desktop's Windows port-forwarding proxy
+does not reliably deliver the long-lived chunked-transfer HTTP responses that Kubernetes watch
+connections depend on. `scripts/observability-up.sh` was fixed accordingly (Step 2 no longer
+passes `--wait`; Step 3 polls with `kubectl get` on a 180s deadline instead of `kubectl wait`).
+If this script is ported to a Linux/WSL2-native Docker host, `--wait`/`kubectl wait` should work
+normally there — this is specifically a Windows Docker Desktop port-forwarding quirk, not a
+kind or Helm defect.
+
 ### Anonymous Grafana Viewer Access
 Grafana's `grafana.ini` enables anonymous access with the `Viewer` role (D-08), so Phase 15/16's
 "Open in Grafana" deep links open without a login wall during demos. Admin login is retained for
