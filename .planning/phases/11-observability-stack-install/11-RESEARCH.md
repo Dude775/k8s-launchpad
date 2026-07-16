@@ -552,9 +552,15 @@ reconfirmation (they are tuning/timing parameters explicitly delegated to Claude
 CONTEXT.md), but are logged here per the assumptions-log discipline since they weren't
 independently re-verified with the same rigor as the chart-default claims above.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+Both open questions below were resolved downstream during planning of Phase 11. Neither remains open at execution time.
 
 1. **Exact conservative resource numbers for `kube-state-metrics.resources`**
+   - RESOLVED: hardcoded into Plan 11-01 Task 1 — `kubeStateMetrics.resources` is set
+     explicitly to `requests {cpu: 10m, memory: 32Mi}` / `limits {cpu: 50m, memory: 64Mi}`
+     in `infra/observability/values-trimmed.yaml`, independent of the chart default, exactly
+     as this question's Recommendation advised.
    - What we know: The parent chart's four other components all default to unbounded
      `resources: {}`; kube-state-metrics is a lightweight component in every other project that
      runs it (typically tens of Mi RSS, negligible CPU).
@@ -567,6 +573,11 @@ independently re-verified with the same rigor as the chart-default claims above.
      unbounded" rule, and cheap enough that being slightly over-conservative costs nothing.
 
 2. **Exact total Docker Desktop headroom needed, expressed as an actionable operator message**
+   - RESOLVED: deferred to a live runtime calculation, not a baked-in number — Plan 11-01
+     Task 2's Step 0 preflight computes `(allocatable - existing_requests)` live and aborts
+     with a Docker Desktop message, and Plan 11-03 Task 1 records the first live-measured
+     headroom figure into `docs/known-limitations.md` under the `Measured observability
+     headroom:` marker, exactly as this question's Recommendation advised.
    - What we know: The dev machine currently reports 9.713 GiB total / 8 CPUs, with no kind
      cluster currently running (this session found `kind get clusters` returned nothing) — so the
      live number reflects an idle Docker Desktop, not one already running the full v1.1 stack.
