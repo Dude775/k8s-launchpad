@@ -61,7 +61,10 @@ Full phase details: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   2. All observability pods reach Running/Ready within conservative resource limits, and immediately re-running `make smoke`/`smoke-launchpad` afterward still passes — the existing field-guide-api and launchpad pods are never evicted or restarted.
   3. Operator can tear down the observability stack via a documented CRD teardown policy, leaving both v1.1 apps running untouched.
   4. Prometheus and Grafana UIs are reachable locally via port-forward.
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 11-01-PLAN.md — Trimmed chart values (`values-trimmed.yaml`) + idempotent self-verifying install script (OBS-01)
+- [ ] 11-02-PLAN.md — Idempotent teardown script + accepted-risk documentation for CRD retention / Grafana creds (OBS-02)
+- [ ] 11-03-PLAN.md — Live install→verify→teardown lifecycle checkpoint (UIs reachable, apps untouched, CRDs retained)
 
 ### Phase 12: ServiceMonitor Scraping
 **Goal**: Prometheus actively discovers and scrapes the existing `/metrics` endpoints of field-guide-api and launchpad, with zero changes to either app's Helm chart.
@@ -149,7 +152,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14 → 15 → 16 → 17
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 2/2 | Complete | 2026-07-11 |
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 4/4 | Complete | 2026-07-12 |
 | 10. Makefile Integration + Smoke + Docs | v1.1 | 2/2 | Complete | 2026-07-13 |
-| 11. Observability Stack Install | v2.0 | 0/? | Not started | - |
+| 11. Observability Stack Install | v2.0 | 0/3 | Not started | - |
 | 12. ServiceMonitor Scraping | v2.0 | 0/? | Not started | - |
 | 13. Grafana Dashboards-as-Code | v2.0 | 0/? | Not started | - |
 | 14. Additive Observability Makefile Targets | v2.0 | 0/? | Not started | - |
