@@ -42,7 +42,7 @@ Full phase details: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 
 **Milestone Goal:** Turn k8s-launchpad from a static live-state dashboard into a real observability platform with a control-room UI — fill the reserved `infra/observability/` seam (PRD-4) and reskin launchpad to "launch to air" portfolio quality, strictly additively. Nothing from v1.1 is deleted, rewritten, or behavior-changed.
 
-- [ ] **Phase 11: Observability Stack Install** - Trimmed kube-prometheus-stack running in the kind cluster, resource-safe, teardown-documented
+- [x] **Phase 11: Observability Stack Install** - Trimmed kube-prometheus-stack running in the kind cluster, resource-safe, teardown-documented (completed 2026-07-16)
 - [ ] **Phase 12: ServiceMonitor Scraping** - Prometheus scrapes both existing apps' `/metrics` with zero chart changes
 - [ ] **Phase 13: Grafana Dashboards-as-Code** - Uptime/latency/error-rate dashboards provisioned automatically on a fresh cluster
 - [ ] **Phase 14: Additive Observability Makefile Targets** - `observability-up`/`observability-down`/`port-forward-grafana`, existing targets untouched
@@ -64,7 +64,7 @@ Full phase details: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 **Plans**: 3 plans
 - [x] 11-01-PLAN.md — Trimmed chart values (`values-trimmed.yaml`) + idempotent self-verifying install script (OBS-01)
 - [x] 11-02-PLAN.md — Idempotent teardown script + accepted-risk documentation for CRD retention / Grafana creds (OBS-02)
-- [ ] 11-03-PLAN.md — Live install→verify→teardown lifecycle checkpoint (UIs reachable, apps untouched, CRDs retained)
+- [x] 11-03-PLAN.md — Live install→verify→teardown lifecycle checkpoint (UIs reachable, apps untouched, CRDs retained)
 
 ### Phase 12: ServiceMonitor Scraping
 **Goal**: Prometheus actively discovers and scrapes the existing `/metrics` endpoints of field-guide-api and launchpad, with zero changes to either app's Helm chart.
@@ -152,7 +152,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14 → 15 → 16 → 17
 | 8. Helm Chart + K8s Diagnostics | v1.1 | 2/2 | Complete | 2026-07-11 |
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 4/4 | Complete | 2026-07-12 |
 | 10. Makefile Integration + Smoke + Docs | v1.1 | 2/2 | Complete | 2026-07-13 |
-| 11. Observability Stack Install | v2.0 | 2/3 | In Progress|  |
+| 11. Observability Stack Install | v2.0 | 3/3 | Complete   | 2026-07-16 |
 | 12. ServiceMonitor Scraping | v2.0 | 0/? | Not started | - |
 | 13. Grafana Dashboards-as-Code | v2.0 | 0/? | Not started | - |
 | 14. Additive Observability Makefile Targets | v2.0 | 0/? | Not started | - |

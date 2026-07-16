@@ -11,8 +11,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Observability Stack
 
-- [ ] **OBS-01**: Operator can install a trimmed kube-prometheus-stack (pinned chart 87.16.1; Alertmanager, node-exporter, default rules, and kind-incompatible kubeadm scrape jobs disabled; conservative resource limits) into the kind cluster from `infra/observability/`
-- [ ] **OBS-02**: Operator can tear down the observability stack cleanly with an explicit, documented CRD teardown policy — both v1.1 apps keep running untouched
+- [x] **OBS-01**: Operator can install a trimmed kube-prometheus-stack (pinned chart 87.16.1; Alertmanager, node-exporter, default rules, and kind-incompatible kubeadm scrape jobs disabled; conservative resource limits) into the kind cluster from `infra/observability/`
+- [x] **OBS-02**: Operator can tear down the observability stack cleanly with an explicit, documented CRD teardown policy — both v1.1 apps keep running untouched
 - [ ] **OBS-03**: Prometheus discovers and scrapes the existing `/metrics` of field-guide-api and launchpad via standalone ServiceMonitors in `infra/observability/` (zero changes to existing charts); both targets report `up == 1`
 
 ### Grafana Dashboards
@@ -82,8 +82,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| OBS-01 | Phase 11 | Pending |
-| OBS-02 | Phase 11 | Pending |
+| OBS-01 | Phase 11 | Complete |
+| OBS-02 | Phase 11 | Complete |
 | OBS-03 | Phase 12 | Pending |
 | GRAF-01 | Phase 13 | Pending |
 | GRAF-02 | Phase 13 | Pending |
