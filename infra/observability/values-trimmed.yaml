@@ -1,0 +1,67 @@
+# infra/observability/values-trimmed.yaml
+# Trimmed kube-prometheus-stack Helm values — disables Alertmanager/node-exporter/kubeadm
+# scrape jobs, sets explicit bounded resources on every kept-enabled component, and configures
+# Grafana admin + anonymous-viewer access for the local kind demo cluster.
+# LOCAL DEV DEFAULTS ONLY — override sensitive values with --set or -f for anything real.
+# Source: .planning/phases/11-observability-stack-install/11-RESEARCH.md (Pattern 2)
+# Chart: prometheus-community/kube-prometheus-stack @ 87.16.1 (pinned, D-05)
+
+alertmanager:
+  enabled: false          # chart default: true — no alerting consumer this milestone
+nodeExporter:
+  enabled: false          # chart default: true — flaky DaemonSet on Docker Desktop kind nodes
+kubeEtcd:
+  enabled: false          # chart default: true — permanently down on kind's containerized control plane
+kubeControllerManager:
+  enabled: false          # chart default: true — same as kubeEtcd, no kubeadm-style bare-metal address
+kubeScheduler:
+  enabled: false          # chart default: true — same as kubeEtcd
+kubeProxy:
+  enabled: false          # chart default: true — same as kubeEtcd
+defaultRules:
+  create: false           # chart default: true — no Alertmanager consumer for these PrometheusRules
+
+kubeStateMetrics:
+  enabled: true           # chart default; kept for future hero-card cluster-state metrics
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 50m, memory: 64Mi }
+
+grafana:
+  enabled: true
+  adminUser: admin
+  # local kind only; never a real credential — override with --set grafana.adminPassword=<real> for anything real.
+  adminPassword: grafana-dev-password
+  "grafana.ini":
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer     # D-08 — Phase 15/16 "Open in Grafana" deep links must not hit a login wall
+  sidecar:
+    dashboards:
+      enabled: true         # already the chart default — kept explicit for readability
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL  # already the chart default — Phase 13 dashboards land wherever the sidecar looks
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+prometheusOperator:
+  resources:
+    requests: { cpu: 50m, memory: 100Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+prometheus:
+  prometheusSpec:
+    retention: 24h          # chart default: 10d — shortened per D-11 (disposable local cluster,
+                             # enough for Phase 13's rolling-window uptime panels)
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    serviceMonitorSelectorNilUsesHelmValues: false   # chart default: true — required so Phase 12's
+                                                       # standalone ServiceMonitors (no `release:`
+                                                       # label) are discovered cluster-wide
+    podMonitorSelectorNilUsesHelmValues: false        # same, for PodMonitors
+    # No storage spec set for this Prometheus resource => Prometheus uses emptyDir by default
+    # (D-11: no PVC, nothing to sweep on teardown; this is the chart's own no-storage-set
+    # behavior, not a special flag).
