@@ -1,7 +1,13 @@
 # infra/observability/values-trimmed.yaml
 # Trimmed kube-prometheus-stack Helm values — disables Alertmanager/node-exporter/kubeadm
-# scrape jobs, sets explicit bounded resources on every kept-enabled component, and configures
-# Grafana admin + anonymous-viewer access for the local kind demo cluster.
+# scrape jobs, and sets explicit bounded resources on every kept-enabled component: each
+# component's own key (grafana, prometheusOperator, prometheus) plus, for the bundled
+# kube-state-metrics subchart, the top-level hyphenated `kube-state-metrics:` key (the
+# camelCase `kubeStateMetrics:` key only toggles enablement — it is NOT consumed as
+# values by the subchart, so resources placed there are silently ignored; WR-01).
+# Grafana's two bundled sidecar containers inherit the chart's default (unset) resources —
+# out of scope for this fix (kube-state-metrics is the D-09 gap).
+# Also configures Grafana admin + anonymous-viewer access for the local kind demo cluster.
 # LOCAL DEV DEFAULTS ONLY — override sensitive values with --set or -f for anything real.
 # Source: .planning/phases/11-observability-stack-install/11-RESEARCH.md (Pattern 2)
 # Chart: prometheus-community/kube-prometheus-stack @ 87.16.1 (pinned, D-05)
@@ -23,6 +29,12 @@ defaultRules:
 
 kubeStateMetrics:
   enabled: true           # chart default; kept for future hero-card cluster-state metrics
+                           # (subchart CONDITION flag only — resources must go under the
+                           # hyphenated `kube-state-metrics:` key below, not here; WR-01)
+
+# Values passed to the bundled kube-state-metrics subchart itself (dependency values key,
+# distinct from the camelCase `kubeStateMetrics:` condition flag above — WR-01).
+kube-state-metrics:
   resources:
     requests: { cpu: 10m, memory: 32Mi }
     limits: { cpu: 50m, memory: 64Mi }

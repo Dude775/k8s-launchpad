@@ -105,13 +105,14 @@ Allocatable: 10184928Ki (~9.71 GiB) | Already requested: 559104Ki (~546 MiB) | H
 ```
 
 After install, the trimmed stack's actual scheduled memory requests summed from the live pods
-(`kubectl get pods -n observability -o jsonpath=...requests.memory`) came to **484 MiB**
-(Grafana 128Mi + Prometheus 256Mi + the operator 100Mi; `kube-state-metrics` and the two
-Grafana sidecars run without an explicit memory request, i.e. BestEffort for that dimension) —
-close to the ~516Mi estimate baked into the script's preflight comment, confirming this dev
-machine's Docker Desktop allocation (9.71 GiB node-allocatable) has ample headroom (~9.18 GiB)
-for the trimmed stack. This is a starting-point measurement per the STATE.md Phase 11 blocker
-note, not a hard budget — re-measure if Docker Desktop's memory allocation changes.
+(`kubectl get pods -n observability -o jsonpath=...requests.memory`) came to **~516 MiB**
+(Grafana 128Mi + Prometheus 256Mi + the operator 100Mi + `kube-state-metrics` 32Mi, live-confirmed
+`Burstable` QoS, not BestEffort; only the two Grafana sidecar containers remain on the chart's
+default, unset resources) — matching the ~516Mi estimate baked into the script's preflight
+comment, confirming this dev machine's Docker Desktop allocation (9.71 GiB node-allocatable) has
+ample headroom (~9.18 GiB) for the trimmed stack. This is a starting-point measurement per the
+STATE.md Phase 11 blocker note, not a hard budget — re-measure if Docker Desktop's memory
+allocation changes.
 
 ### Windows/Docker Desktop: `helm --wait` and watch-based waits hang on this kind setup
 Live-verified during Phase 11 Plan 03: `helm upgrade --install ... --wait --timeout 300s`
