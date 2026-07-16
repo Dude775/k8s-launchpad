@@ -14,9 +14,12 @@ There is no web UI for registering Git repos or viewing deployment status. The H
 `values.yaml` is structured generically so PRD-3 can template new apps from it, but the
 onboarding layer itself does not exist yet.
 
-### No Prometheus / Grafana / Loki / Trivy (PRD-4)
-The field-guide API exposes `/metrics` in Prometheus format as a scrape seam. Deploying
-Prometheus, Grafana, Loki, or running Trivy vulnerability scans is deferred to PRD-4.
+### Loki / Trivy / Alertmanager Remain Deferred (PRD-4)
+As of Phase 11 (v2.0), Prometheus, Grafana, and kube-state-metrics are installed via
+`infra/observability/` (a trimmed `kube-prometheus-stack` release in the `observability`
+namespace) — the field-guide API's `/metrics` scrape seam is now actually scraped. Loki
+(log aggregation), Trivy (vulnerability scanning), and Alertmanager (notification rules)
+remain deferred; they are tracked in REQUIREMENTS.md Future Requirements.
 
 ### Port-Forward Only — No Ingress or TLS
 The API is reachable exclusively via `kubectl port-forward svc/field-guide-api 8080:80` on
@@ -65,6 +68,38 @@ helm upgrade launchpad charts/launchpad --set mongoUri=<real-uri>
 
 (Flagged in Phase 9 review/verification as WR-01; genuinely open — tracked here rather than
 fixed in-chart because PRD-1/v1.1 scope is local-only.)
+
+### Committed Grafana Admin Password (`grafana-dev-password`)
+The observability stack ships with a committed local-dev Grafana admin password,
+`grafana-dev-password`, set in `infra/observability/values-trimmed.yaml`. This is a local
+kind-cluster convenience value — never a real credential — and follows the same
+committed-dev-password discipline as the MongoDB password documented above. Override it for
+anything beyond localhost:
+
+```bash
+helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack -n observability \
+  --reuse-values --set grafana.adminPassword=<real-password>
+```
+
+### CRD Teardown Leaves `monitoring.coreos.com` CRDs Installed
+`make observability-down` / `scripts/observability-down.sh` runs `helm uninstall` only. By
+Helm's documented `crds/` directory behavior, `helm uninstall` never removes CRDs it installed —
+so the `monitoring.coreos.com` CustomResourceDefinitions (Prometheus, ServiceMonitor, etc.)
+remain on the cluster after teardown. This is intentional (D-01): it makes re-running
+`observability-up` faster and carries zero cascade-delete risk to Phase 12's ServiceMonitors,
+which depend on those CRDs existing. If a full reset is ever wanted, the CRDs can be removed
+manually:
+
+```bash
+kubectl delete crd -l app.kubernetes.io/part-of=kube-prometheus-stack
+```
+
+### Anonymous Grafana Viewer Access
+Grafana's `grafana.ini` enables anonymous access with the `Viewer` role (D-08), so Phase 15/16's
+"Open in Grafana" deep links open without a login wall during demos. Admin login is retained for
+editing dashboards. As with the rest of the platform (see "Port-Forward Only — No Ingress or
+TLS" above), Grafana is reachable exclusively via `kubectl port-forward` on `localhost` — the
+widened Viewer role is scoped to that local-only surface, not exposed on any network.
 
 ### Cosmetic gunicorn `/home/app` Warning in Startup Logs
 gunicorn logs a permission warning at startup because the non-root user (`UID 10001`) has no
