@@ -135,6 +135,8 @@ This document evolves at phase transitions and milestone boundaries.
 
 ## Current State
 
+**v2.0 Phase 11 (Observability Stack Install) complete 2026-07-16** — verified 14/14 must-haves (OBS-01, OBS-02). Trimmed kube-prometheus-stack (chart 87.16.1: Prometheus Operator + Prometheus + Grafana + kube-state-metrics; Alertmanager/node-exporter/kubeadm jobs disabled) installs into the `observability` namespace via `scripts/observability-up.sh` with every kept-enabled component resource-bounded (~516 MiB total requests; D-09 kube-state-metrics gap closed live: 32Mi/10m, Burstable QoS), and tears down via `scripts/observability-down.sh` (namespace deleted, 10 monitoring CRDs retained per D-01). Both v1.1 apps survived three full install→teardown lifecycles with zero restarts. Certified end state: torn down. Next: Phase 12 ServiceMonitor scraping.
+
 **v1.1 Product Dashboard shipped 2026-07-14** (milestone audit passed 27/27 requirements, 4/4 E2E flows). `make up-all` brings up the kind cluster and deploys both apps in one command; the launchpad dashboard at `localhost:8081` shows live status cards, a service catalog with full register/view/deregister CRUD, a K8s diagnostics panel, and a TTL-bounded activity feed — verified live with five real screenshots and human sign-off. Two Flask workloads (field-guide-api: 32 tests, launchpad: 128 tests, both 100% coverage), two independent Helm charts each with its own in-cluster mongo:7, 142 commits over 7 days (v1.0..v1.1: +21,464/−1,477 across 149 files).
 
 **v1.0 Foundation shipped 2026-07-07.** Full local build-to-deploy loop: `make up` produces a running Flask field-guide API on kind with local registry, backed by in-cluster MongoDB, confirmed by `make smoke`. All PRD-2/4 seams in place: `/metrics` endpoints on both apps, generic values.yaml, `infra/argocd/` and `infra/observability/` directories.
@@ -146,4 +148,4 @@ Known tech debt (all tracked, non-blocking): 6 INFO/WARNING items in milestones/
 After v2.0: v2.1 Loki/log aggregation (deferred from v2.0), then PRD-2 GitOps — ArgoCD syncs deployments from Git (GITOPS-01) with the Mission Control UI surfacing sync state — then Trivy/security (rest of PRD-4), then final PRD AWS/EKS.
 
 ---
-*Last updated: 2026-07-16 — milestone v2.0 started*
+*Last updated: 2026-07-16 — Phase 11 (Observability Stack Install) complete, verified 14/14*
