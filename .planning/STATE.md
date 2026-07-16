@@ -2,9 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Observability + Mission Control
-status: roadmap-ready
-last_updated: "2026-07-16T00:00:00.000Z"
-last_activity: 2026-07-16
+status: "Roadmap ready — awaiting /gsd:plan-phase 11"
+stopped_at: Phase 11 context gathered
+last_updated: "2026-07-16T00:49:14.740Z"
+last_activity: 2026-07-16 — Roadmap created for v2.0 (7 phases, 19/19 requirements mapped)
 progress:
   total_phases: 7
   completed_phases: 0
@@ -44,6 +45,7 @@ Progress: [░░░░░░░░░░] 0%
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table. v2.0-relevant decisions already recorded there (pending outcome):
+
 - v2.0 = PRD-4 observability before PRD-2 GitOps
 - Trimmed kube-prometheus-stack (no Alertmanager/node-exporter/kubeadm scrape jobs)
 - ServiceMonitors live in `infra/observability/`, not in app charts
@@ -75,9 +77,9 @@ None yet for v2.0.
 
 ## Session Continuity
 
-Last session: 2026-07-16
-Stopped at: v2.0 ROADMAP.md written (Phases 11-17), REQUIREMENTS.md traceability updated, 19/19 requirements mapped
-Resume file: none — next step is /gsd:plan-phase 11
+Last session: 2026-07-16T00:49:14.717Z
+Stopped at: Phase 11 context gathered
+Resume file: .planning/phases/11-observability-stack-install/11-CONTEXT.md
 
 ## Operator Next Steps
 
