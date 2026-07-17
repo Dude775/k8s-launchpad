@@ -4,8 +4,8 @@ milestone: v2.0
 milestone_name: Observability + Mission Control
 status: executing
 stopped_at: Session resumed, proceeding to plan Phase 12
-last_updated: "2026-07-17T21:30:19.585Z"
-last_activity: 2026-07-17 -- Phase 12 planning complete
+last_updated: "2026-07-17T21:35:03.335Z"
+last_activity: 2026-07-17 -- Phase 12 execution started
 progress:
   total_phases: 7
   completed_phases: 1
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16 after v2.0 requirements + research)
 
 **Core value:** `make up-mission-control` brings up the cluster, both apps, the observability stack, and seeded demo data — the platform demos as a production-grade control room with real telemetry
-**Current focus:** Phase 12 — servicemonitor scraping
+**Current focus:** Phase 12 — servicemonitor-scraping
 
 ## Current Position
 
-Phase: 12
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-17 -- Phase 12 planning complete
+Phase: 12 (servicemonitor-scraping) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 12
+Last activity: 2026-07-17 -- Phase 12 execution started
 
 Progress: [██████████] 100%
 
