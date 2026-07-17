@@ -123,8 +123,72 @@ while true; do
   sleep 5
 done
 
-# ── Step 4: Additive-only re-verification (D-06) ─────────────────────────────
-echo "==> Step 4: Re-verifying v1.1 apps are unaffected..."
+# ── Step 4: ServiceMonitor CRD existence guard (D-02) ────────────────────────
+echo "==> Step 4: Verifying ServiceMonitor CRD is installed..."
+if ! kubectl ${KCTX} get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
+  echo "ERROR: CRD servicemonitors.monitoring.coreos.com not found."
+  echo "  ACTION: the observability stack install (Steps 0-3 above) must complete"
+  echo "  successfully before ServiceMonitors can be applied — re-run this script"
+  echo "  (bash scripts/observability-up.sh) from a clean state, or check"
+  echo "  'kubectl ${KCTX} get pods -n observability' for a stuck install."
+  exit 1
+fi
+echo "    CRD present — continuing."
+
+# ── Step 5: Apply ServiceMonitors (D-01, D-07) ───────────────────────────────
+echo "==> Step 5: Applying ServiceMonitor manifests..."
+kubectl ${KCTX} apply -f infra/observability/servicemonitor-field-guide-api.yaml
+kubectl ${KCTX} apply -f infra/observability/servicemonitor-launchpad.yaml
+
+# ── Step 6: Per-app presence check (D-03) ────────────────────────────────────
+echo "==> Step 6: Checking which v1.1 apps are deployed..."
+VERIFY_JOBS=""
+for job in field-guide-api launchpad; do
+  if kubectl ${KCTX} -n default get svc "$job" >/dev/null 2>&1; then
+    VERIFY_JOBS="${VERIFY_JOBS} ${job}"
+  else
+    echo "    WARNING: Service '${job}' not found in namespace 'default' — apps not"
+    echo "    deployed yet. ServiceMonitor applied anyway; skipping its up==1 check."
+    echo "    Targets will appear after 'make up-all' (or the app-specific deploy target)."
+  fi
+done
+
+# ── Step 7: Self-verify scraping — up == 1 (D-10) ────────────────────────────
+echo "==> Step 7: Verifying Prometheus is scraping the applied targets..."
+if [ -z "$VERIFY_JOBS" ]; then
+  echo "    No deployed apps to verify against — skipping scrape self-check entirely."
+else
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -f "kubectl port-forward -n ${NAMESPACE} svc/kube-prometheus-stack-prometheus" 2>/dev/null || true
+  fi
+  kubectl ${KCTX} port-forward -n "${NAMESPACE}" svc/kube-prometheus-stack-prometheus 9090:9090 &>/dev/null &
+  PF_PID=$!
+  trap "kill ${PF_PID} 2>/dev/null || true" EXIT
+  sleep 3
+
+  DEADLINE=$(( $(date +%s) + 150 ))
+  for job in $VERIFY_JOBS; do
+    echo "    Waiting for up{job=\"${job}\"} == 1..."
+    while true; do
+      RESPONSE=$(curl -s -G "http://localhost:9090/api/v1/query" --data-urlencode "query=up{job=\"${job}\"}")
+      if echo "$RESPONSE" | grep -qE '"value":\[[0-9.]+,"1"\]'; then
+        echo "      PASS  up{job=\"${job}\"} == 1"
+        break
+      fi
+      if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+        echo "ERROR: up{job=\"${job}\"} did not reach 1 within 150s."
+        echo "  Last response: ${RESPONSE}"
+        echo "  ACTION: check 'kubectl ${KCTX} -n ${NAMESPACE} port-forward svc/kube-prometheus-stack-prometheus 9090:9090'"
+        echo "  and open http://localhost:9090/targets — look for job=\"${job}\" and its error reason."
+        exit 1
+      fi
+      sleep 5
+    done
+  done
+fi
+
+# ── Step 8: Additive-only re-verification (D-06) ─────────────────────────────
+echo "==> Step 8: Re-verifying v1.1 apps are unaffected..."
 make smoke
 make smoke-launchpad
 
