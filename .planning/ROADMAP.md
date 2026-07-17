@@ -75,7 +75,9 @@ Full phase details: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   1. Standalone `ServiceMonitor` manifests exist in `infra/observability/` for field-guide-api and launchpad; neither app chart is modified.
   2. Prometheus's Targets page shows `up == 1` for both the field-guide-api and launchpad scrape jobs.
   3. Operator can confirm scraping via a live PromQL query (`up{job=...}`) returning 1 for both jobs, not just object creation succeeding.
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 12-01-PLAN.md — Author both ServiceMonitor manifests + extend observability-up.sh (CRD guard, apply, presence check, up==1 self-verify) (OBS-03)
+- [ ] 12-02-PLAN.md — Live up -> verify up==1 -> operator Targets-page checkpoint -> down to certified torn-down end state (OBS-03)
 
 ### Phase 13: Grafana Dashboards-as-Code
 **Goal**: Golden-signal Grafana dashboards (uptime, latency, error rate) are version-controlled and appear automatically on any fresh cluster install with zero manual clicks.
@@ -154,7 +156,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14 → 15 → 16 → 17
 | 9. Service Catalog + Events / MongoDB CRUD | v1.1 | 4/4 | Complete | 2026-07-12 |
 | 10. Makefile Integration + Smoke + Docs | v1.1 | 2/2 | Complete | 2026-07-13 |
 | 11. Observability Stack Install | v2.0 | 4/4 | Complete    | 2026-07-16 |
-| 12. ServiceMonitor Scraping | v2.0 | 0/? | Not started | - |
+| 12. ServiceMonitor Scraping | v2.0 | 0/2 | Not started | - |
 | 13. Grafana Dashboards-as-Code | v2.0 | 0/? | Not started | - |
 | 14. Additive Observability Makefile Targets | v2.0 | 0/? | Not started | - |
 | 15. Native Metric-Card Client + Graceful Degradation | v2.0 | 0/? | Not started | - |
