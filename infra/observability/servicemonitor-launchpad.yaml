@@ -1,0 +1,19 @@
+# infra/observability/servicemonitor-launchpad.yaml
+# Standalone ServiceMonitor for launchpad (OBS-03, D-07). No chart edits.
+# No Helm-instance label needed on the selector — infra/observability/values-trimmed.yaml
+# already sets prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues: false
+# (Phase 11), so the Prometheus CR discovers ServiceMonitors cluster-wide regardless of label.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: launchpad
+  namespace: observability
+spec:
+  namespaceSelector:
+    matchNames: ["default"]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: launchpad
+  endpoints:
+    - port: http        # matches charts/launchpad/templates/service.yaml's `name: http`
+      interval: 15s      # D-08 — explicit; all other params left at chart default (D-09)
