@@ -159,7 +159,10 @@ if [ -z "$VERIFY_JOBS" ]; then
   echo "    No deployed apps to verify against — skipping scrape self-check entirely."
 else
   if command -v pkill >/dev/null 2>&1; then
-    pkill -f "kubectl port-forward -n ${NAMESPACE} svc/kube-prometheus-stack-prometheus" 2>/dev/null || true
+    # Pattern anchored on `port-forward.*svc/<name>` so it matches regardless of
+    # flag position (the actual command line includes `--context=kind-kind`
+    # between `kubectl` and `port-forward`).
+    pkill -f "port-forward.*svc/kube-prometheus-stack-prometheus" 2>/dev/null || true
   fi
   kubectl ${KCTX} port-forward -n "${NAMESPACE}" svc/kube-prometheus-stack-prometheus 9090:9090 &>/dev/null &
   PF_PID=$!
