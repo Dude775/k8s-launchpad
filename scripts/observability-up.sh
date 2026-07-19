@@ -170,7 +170,13 @@ else
   for job in $VERIFY_JOBS; do
     echo "    Waiting for up{job=\"${job}\"} == 1..."
     while true; do
-      RESPONSE=$(curl -s -G "http://localhost:9090/api/v1/query" --data-urlencode "query=up{job=\"${job}\"}")
+      # `|| true`: a transient curl failure (connection refused while the
+      # port-forward warms up / drops) must NOT abort the script under errexit —
+      # the deadline check below owns failure handling (mirrors Step 3's guards).
+      # `--max-time 10`: bounds each poll so a half-open connection through the
+      # Docker Desktop proxy (see Step 2 note) can't hang past the 150s deadline.
+      RESPONSE=$(curl -s --max-time 10 -G "http://localhost:9090/api/v1/query" \
+        --data-urlencode "query=up{job=\"${job}\"}" || true)
       if echo "$RESPONSE" | grep -qE '"value":\[[0-9.]+,"1"\]'; then
         echo "      PASS  up{job=\"${job}\"} == 1"
         break
