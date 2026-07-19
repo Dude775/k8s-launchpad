@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Observability + Mission Control
 status: executing
-stopped_at: Session resumed, proceeding to plan Phase 12
-last_updated: "2026-07-17T21:35:03.335Z"
-last_activity: 2026-07-17 -- Phase 12 execution started
+stopped_at: Phase 12 closed out (review fixes, UAT 4/4, security verified) — next Phase 13
+last_updated: "2026-07-20T01:40:00.000Z"
+last_activity: 2026-07-20 -- Phase 12 complete: review fixes applied, UAT passed, threats verified
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 4
-  percent: 14
+  completed_plans: 6
+  percent: 29
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-16 after v2.0 requirements + research)
 
 **Core value:** `make up-mission-control` brings up the cluster, both apps, the observability stack, and seeded demo data — the platform demos as a production-grade control room with real telemetry
-**Current focus:** Phase 12 — servicemonitor-scraping
+**Current focus:** Phase 13 — grafana-dashboards-as-code (next to discuss/plan)
 
 ## Current Position
 
-Phase: 12 (servicemonitor-scraping) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 12
-Last activity: 2026-07-17 -- Phase 12 execution started
+Phase: 12 (servicemonitor-scraping) — COMPLETE (2026-07-17; closed out 2026-07-20: 5 review fixes, UAT 4/4 pass, SECURITY verified threats_open:0)
+Plan: 2 of 2 complete
+Status: Ready to discuss/plan Phase 13
+Last activity: 2026-07-20 -- Phase 12 closed out
 
-Progress: [██████████] 100%
+Progress: [███░░░░░░░] 29%
 
 ## Performance Metrics
 
@@ -80,9 +80,9 @@ None yet for v2.0.
 
 ## Session Continuity
 
-Last session: 2026-07-18
-Stopped at: Session resumed, proceeding to plan Phase 12
-Resume file: .planning/phases/12-servicemonitor-scraping/12-CONTEXT.md
+Last session: 2026-07-20
+Stopped at: Phase 12 fully closed out (review fixes committed, UAT 4/4 passed live, 12-SECURITY.md verified threats_open:0) — next: /gsd-discuss-phase 13
+Resume file: none
 
 ## Operator Next Steps
 
