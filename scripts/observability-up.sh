@@ -168,6 +168,13 @@ else
   PF_PID=$!
   trap "kill ${PF_PID} 2>/dev/null || true" EXIT
   sleep 3
+  # Fail fast if the port-forward died already (e.g. port 9090 taken by a stale
+  # forward) — otherwise every poll below fails and burns the full deadline with
+  # an empty "Last response:" diagnostic.
+  if ! kill -0 "${PF_PID}" 2>/dev/null; then
+    echo "ERROR: kubectl port-forward exited immediately — is port 9090 already in use?"
+    exit 1
+  fi
 
   DEADLINE=$(( $(date +%s) + 150 ))
   for job in $VERIFY_JOBS; do
