@@ -176,8 +176,11 @@ else
     exit 1
   fi
 
-  DEADLINE=$(( $(date +%s) + 150 ))
   for job in $VERIFY_JOBS; do
+    # Per-job deadline: computed inside the loop so each job gets its own 150s
+    # budget — a slow first job (operator reload + scrape interval can take
+    # ~140s) must not starve the second job's verification window.
+    DEADLINE=$(( $(date +%s) + 150 ))
     echo "    Waiting for up{job=\"${job}\"} == 1..."
     while true; do
       # `|| true`: a transient curl failure (connection refused while the
