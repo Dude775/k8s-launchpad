@@ -39,6 +39,27 @@ graph LR
     helm --> app[field-guide-api pod]
     helm --> mongo[MongoDB pod]
     app --> mongo
+
+charts/
+├── field-guide-api/            # PRD-1 dogfood workload (Flask REST API)
+│   ├── Chart.yaml              # apiVersion v2, app 0.1.0
+│   ├── values.yaml             # image / service / resources / config / mongodb blocks
+│   └── templates/
+│       ├── deployment.yaml     # non-root, runAsNonRoot, allowPrivilegeEscalation: false
+│       ├── service.yaml        # ClusterIP :80 → :8000
+│       ├── configmap.yaml      # app config (no secrets)
+│       ├── secret.yaml         # MONGO_URI via stringData + secretKeyRef only
+│       ├── mongodb/            # embedded mongo:7: deployment, service, PVC (1Gi), secret
+│       └── NOTES.txt           # loud local-dev-password warning
+└── launchpad/                  # PRD-3 platform dashboard (the product)
+    ├── Chart.yaml
+    ├── values.yaml             # same schema + metrics.enabled, eventsTtlSeconds (604800 = 7-day TTL)
+    └── templates/
+        ├── (same set as field-guide-api …)
+        └── rbac.yaml           # ServiceAccount + namespace-scoped Role + RoleBinding
+                                #   rules: pods + deployments, verbs: get/list/watch
+                                #   (read-only, least privilege, NEVER ClusterRole, T-08-01)
+
 ```
 
 ## What This Proves
