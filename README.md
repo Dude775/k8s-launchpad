@@ -1,45 +1,113 @@
 # k8s-launchpad
 
-A self-hosted Internal Developer Platform (IDP) — a "mini-Heroku" running on a local Kubernetes
-cluster. k8s-launchpad automatically builds (Docker), deploys (Helm), syncs (ArgoCD), monitors
-(Prometheus/Grafana/Loki), and security-scans (Trivy) applications from a registered Git repo.
-Built as a portfolio piece to demonstrate platform-engineering-level thinking.
+A self-hosted Internal Developer Platform (IDP) — a "mini-Heroku" running entirely on a local
+Kubernetes cluster. A developer registers an app through a web dashboard; the platform
+builds it (Docker), deploys it (Helm), and monitors it (Prometheus/Grafana) — with a
+self-diagnostics engine that health-checks the platform's own components. Built as a
+portfolio flagship to demonstrate platform-engineering-level thinking, with a GSD
+(Goal-Driven Development) process trail: every phase ships with a plan, a summary, a
+review, and a security audit.
 
-**v1.1 (Product Dashboard):** a browser-based local IDP dashboard (`apps/launchpad/`) sits
-alongside the PRD-1 field-guide API — service catalog, diagnostics, and an activity feed, all
-backed by in-cluster MongoDB. Everything runs locally and for free. One command brings up the
-full stack, both apps included:
+> Real numbers, taken from the project's own planning and security artifacts (not marketing):
+> 160 unit tests across two Flask workloads at 100% coverage, 27/27 milestone requirements
+> audited, 4/4 end-to-end demo flows verified, and a per-phase STRIDE threat-modeling pass
+> (0 open threats at every phase boundary).
 
-```bash
-make up-all
+---
+
+## Why It Exists
+
+- Prove a complete **build → push → Helm-deploy → smoke** loop against a real local cluster
+  (`kind`), one command end-to-end, no cloud, zero cost.
+- Demonstrate **platform engineering**, not just app deployment: generic Helm charts,
+  least-privilege RBAC, observability seams, security threat models, and a readable,
+  reviewer-friendly commit history.
+- Be the demo a human can open in a browser in under two minutes: `make up-all`, then
+  `http://localhost:8081` shows live status cards, a service catalog, K8s diagnostics, and an
+  activity feed.
+
+---
+
+## Live Demo
+
+![Launchpad dashboard](docs/screenshots/dashboard.png)
+*Launchpad dashboard — status cards for MongoDB, Field Guide API, version, and registered services.*
+
+![Launchpad service catalog](docs/screenshots/catalog.png)
+*Launchpad service catalog — empty state with the "Onboard your first service" CTA.*
+
+![Launchpad onboard form](docs/screenshots/onboard-form.png)
+*Launchpad onboard form — "Register a Service".*
+
+![Launchpad diagnostics](docs/screenshots/diagnostics.png)
+*Launchpad diagnostics — platform checks and cluster state showing pods and deployments.*
+
+![Launchpad activity feed](docs/screenshots/feed.png)
+*Launchpad activity feed — "Platform started" event.*
+
+---
+
+## Sold-By-Numbers (verified in-repo)
+
+| Metric | Value | Source in repo |
+|---|---|---|
+| Unit tests — `field-guide-api` | **32 tests, 100% coverage** | `make test`, Phase 1 verification |
+| Unit tests — `launchpad` | **128 tests, 100% coverage** | `make test-launchpad`, Phase 9 verification |
+| Milestone audit (v1.1) | **27/27 requirements, 4/4 E2E flows** | `.planning/milestones/v1.1-MILESTONE-AUDIT.md` |
+| STRIDE threat modeling | **per-phase; 0 open threats every phase** | `*-SECURITY.md` (Phase 1: 11/11, Phase 3: 12/12, Phase 10: 7/7, Phase 11: 10/10) |
+| v1.0 velocity | 4 phases, 12 plans, **114 commits**, 4 days | `.planning/STATE.md` |
+| v1.1 velocity | 6 phases, 14 plans, 36 tasks, **142 commits**, 7 days | `.planning/STATE.md` |
+| v2.0 Phase 11 | 14/14 must-haves verified (OBS-01/02) | `.planning/PROJECT.md` Current State |
+| Screenshots of live demo | 5 real captures (dashboard, catalog, onboard, diagnostics, feed) | `docs/screenshots/` |
+| Runtime footprint (both apps + 2 MongoDBs) | fits a Docker-Desktop kind node; observability stack trimmed to ~516 MiB requests | `infra/observability/values-trimmed.yaml`, Phase 11 |
+
+---
+
+## Stack (locked, pinned versions)
+
+### Applications
+
+| Layer | Technology | Version |
+|---|---|---|
+| Runtime | Python | 3.11 (`python:3.11-slim`, multi-stage build, non-root **UID 10001**) |
+| API (workload) | Flask + Flask-PyMongo | 3.1.3 / 3.0.1 |
+| API (platform) | Flask app factory + gunicorn (PID 1, exec-form) | 3.1.3 / 26.0.0 |
+| DB | MongoDB in-cluster (plain `mongo:7` manifests, NOT Bitnami) | 7 |
+| K8s client (diagnostics) | official `kubernetes` client | 33.1.0 (aligned with K8s 1.33) |
+| Web forms / CSRF | Flask-WTF | 1.3.0 |
+| Metrics | prometheus-flask-exporter (`/metrics` on both apps) | 0.23.2 |
+| UI | Jinja2 + vendored **htmx** (no build step, no CDN, fully offline) | 2.0.10 |
+| UI CSS | vendored **Pico.css** (+ Mission Control dark layer) | 2.1.1 |
+| Tests | pytest + pytest-cov (`--cov-fail-under=95`) | 9.1.1 |
+
+### Cluster & Tooling
+
+| Tool | Version / Detail |
+|---|---|
+| kind (local cluster) | 0.32.0 — node image Kubernetes **1.33.1** |
+| Local registry | `registry:3` on `localhost:5001`, loopback-only (`127.0.0.1`), per-node `containerd` `hosts.toml` mirror |
+| Helm | 3.x — two independent charts, `apiVersion: v2` |
+| Make | AWK-powered self-documenting help; `MSYS_NO_PATHCONV=1`, `.NOTPARALLEL`, Git-Bash supported |
+| Git hygiene | `.gitattributes` `* text=auto eol=lf` + per-type rules (CRLF/LF threat policy) |
+
+### v2.0 Observability Additions (Phase 11 shipped)
+
+| Component | Detail |
+|---|---|
+| kube-prometheus-stack (Helm chart, pinned) | **87.16.1** — operator + Prometheus + Grafana 12.7.2 + kube-state-metrics 7.8.1 |
+| Trimmed (deliberately disabled) | Alertmanager, node-exporter, defaultRules (resource budget on kind) |
+| Deploy | `make observability-up` into its own `observability` namespace; **port-forward only**, no Ingress/NodePort |
+| Dashboards | Grafana dashboards-as-code via sidecar ConfigMaps (`grafana_dashboard: "1"`) |
+| Governance | pinned chart version, live resource caps on all kept components, teardown scoped to release + namespace |
+
+---
+
+## Helm Architecture
+
+Two independent, generically-structured charts — this is the PRD-3 templating seam: a new app
+is deployed by supplying a different `image.*` block.
+
 ```
-
-Then, in a second terminal:
-
-```bash
-make port-forward-launchpad
-```
-
-Open **http://localhost:8081** in a browser to see the live dashboard. Verify everything is
-reachable with:
-
-```bash
-make smoke-all
-```
-
-## Architecture
-
-```mermaid
-graph LR
-    dev[Developer] -->|make up| mk[Makefile]
-    mk -->|docker build| reg[localhost:5001 registry]
-    mk -->|docker push| reg
-    reg -->|containerd mirror| kind[kind cluster]
-    mk -->|helm upgrade --install| helm[Helm]
-    helm --> app[field-guide-api pod]
-    helm --> mongo[MongoDB pod]
-    app --> mongo
-
 charts/
 ├── field-guide-api/            # PRD-1 dogfood workload (Flask REST API)
 │   ├── Chart.yaml              # apiVersion v2, app 0.1.0
@@ -59,188 +127,152 @@ charts/
         └── rbac.yaml           # ServiceAccount + namespace-scoped Role + RoleBinding
                                 #   rules: pods + deployments, verbs: get/list/watch
                                 #   (read-only, least privilege, NEVER ClusterRole, T-08-01)
-
 ```
 
-## What This Proves
+Key design decisions (all documented in `.planning/PROJECT.md` Key Decisions):
 
-- **Local Kubernetes from scratch** — kind cluster + containerd registry mirror wired in a single
-  idempotent `make cluster-up` call; no cloud, no cost.
-- **Complete build-to-deploy loop** — `make up` chains Docker build → registry push → Helm
-  install in one target; every step is a named, overridable make target.
-- **GitOps seam (PRD-2)** — `infra/argocd/` directory reserved; ArgoCD will watch this repo
-  and reconcile the Helm release automatically.
-- **Observability seam (PRD-4)** — app already exposes `/metrics` in Prometheus format; adding
-  a scrape config is the only change needed in a future phase.
-- **Generic Helm chart (PRD-3)** — `values.yaml` is structured so the platform layer can
-  template new apps by supplying a different `image.*` block.
-- **Self-documenting DX** — bare `make` prints a columnar help listing; `make smoke` proves the
-  deployed stack is live in under 10 seconds.
+1. **Embedded MongoDB per chart** (plain `mongo:7`, not Bitnami — paywalled since Sep 2025).
+   Each app is independently installable/uninstallable; a Deployment-bound PVC (not a
+   StatefulSet) makes `helm uninstall` remove storage cleanly. TTL index (7 days) on the
+   events collection, verified live by `make verify-ttl TTL_DEEP=1`.
+2. **Readiness isolation**: `/health` checks only the pod's own MongoDB; downstream reachability
+   (field-guide, Prometheus) lives in the aggregated `/api/status` — the readiness probe never
+   couples to optional services.
+3. **RBAC diagnostics**: the dashboard queries the K8s API in-cluster through a dedicated
+   ServiceAccount bound to a namespace-scoped Role (pods + deployments, read-only), with all
+   three failure branches (outside-cluster / 403 / timeout) tested — never a 500.
+4. **Identity + secrets**: `SECRET_KEY`, MongoDB passwords and the `MONGO_URI` are
+   local-dev-only chart values with a clear "override with `--set` for anything real"
+   convention, loudly surfaced in `helm install` output.
+5. **No-internet UI**: htmx + Pico vendored into the repo — the dashboard renders fully
+   offline, no CDN, no build step.
 
-## Prerequisites
+---
 
-| Tool | Minimum | Install |
-|------|---------|---------|
-| Docker Desktop | 27.x | https://docs.docker.com/desktop/install/windows-install/ |
-| kind | 0.32.0 | `winget install Kubernetes.kind` |
-| Helm | 3.21+ or 4.x | `winget install Helm.Helm` |
-| kubectl | 1.29+ | `winget install Kubernetes.kubectl` |
-| GNU make | 4.x | included with Git for Windows / WSL2 |
+## Security (STRIDE threat modeling)
 
-After installing, verify everything is on PATH:
+Every phase carries a per-phase threat register in `*-SECURITY.md` (STRIDE categories), each
+threat with a disposition (`mitigate` / `accept`), evidence, and an audit line.
+**Zero open threats at every phase boundary.**
 
-```bash
-make check-tools
+| Artifact | Threat total | Closed | Open |
+|---|---|---|---|
+| Phase 1 — Scaffold + App + Tests | 11 | 11 | 0 |
+| Phase 2 — Cluster Infrastructure | 6 | 6 | 0 |
+| Phase 3 — Containerization + Helm | 12 | 12 | 0 |
+| Phase 10 — Makefile + Smoke + Docs | 7 | 7 | 0 |
+| Phase 11 — Observability Stack | 10 | 10 | 0 |
+
+Representative mitigations (verbatim from the registers):
+
+- **Elevation of privilege**: non-root `UID 10001` + `runAsNonRoot: true` + `allowPrivilegeEscalation: false` (T-03-01, T-03-07); registry bound to `127.0.0.1:5001` only (T-02-01); Grafana/Prometheus reachable via port-forward only (T-11-03).
+- **Tampering / supply chain**: exact-pin `==` on all runtime and test deps (T-02-SC, T-03-01-SC); explicit `COPY app/ ./app/` with no broad `COPY . .` (T-03-02); chart version pinned `87.16.1` with provenance round-trip (T-11-SC).
+- **Information disclosure**: `MONGO_URI`/passwords only via `stringData` + `secretKeyRef`, never in ConfigMaps or NOTES (T-03-04, T-03-05); `.gitignore` + staged-commit hygiene before the first commit (T-01-01, T-01-03); `FLASK_DEBUG` default-empty/disabled (T-03-03).
+- **Spoofing / false-green**: `mongo_down` fixture exercises the 503 branch; `--cov-fail-under=95` fails the suite on coverage drop (T-03-03, Phase 1).
+- **DoS**: resource `requests/limits` on every observability component + preflight capacity gate + post-install smoke re-check (T-11-02).
+
+Accepted risks (documented, not hidden): unbounded `GET /entries` scan (single-user local,
+re-evaluate at multi-user), loopback HTTP registry traffic, committed **local-dev-only**
+passwords (`fieldguide-dev-password`, `launchpad-dev-password`, `grafana-dev-password`) —
+each with an override command and a dedicated section in `docs/known-limitations.md`.
+
+---
+
+## Architecture (as-built)
+
+```mermaid
+graph LR
+    dev[Developer] -->|make up-all| mk[Makefile]
+    mk -->|docker build + push| reg[localhost:5001 registry]
+    reg -->|containerd mirror| kind[kind cluster]
+    mk -->|helm upgrade --install| helm[Helm]
+    helm --> app1[field-guide-api pod]
+    helm --> app2[launchpad dashboard pod]
+    helm --> m1[(MongoDB: fieldguide)]
+    helm --> m2[(MongoDB: launchpad)]
+    app1 --> m1
+    app2 --> m2
+    app2 -->|read-only K8s API + RBAC| kapi[Kubernetes API]
+    app2 -->|/metrics| prom[Prometheus - observability ns]
+    prom --> graf[Grafana - dashboards-as-code]
 ```
 
-Windows users: **Git Bash is the primary supported shell.** See [docs/windows-setup.md](docs/windows-setup.md)
-for `winget` install commands, the `MSYS_NO_PATHCONV` explanation, and WSL2 as an alternative path.
+Two Flask workloads, two charts, two in-cluster MongoDBs, one kind cluster, one local
+registry, and (v2.0) one trimmed Prometheus/Grafana stack in its own namespace — all
+brought up by one command and torn down cleanly.
 
-## Quickstart
+---
+
+## Quickstart (runs entirely locally, free)
 
 ```bash
 git clone https://github.com/Dude775/k8s-launchpad.git
 cd k8s-launchpad
-make check-tools           # verify Docker, kind, Helm, kubectl, bash are on PATH
-make up-all                # cluster-up → build/load/deploy BOTH apps (one command)
-make port-forward-launchpad  # in a second terminal — forwards svc/launchpad to :8081
-# open http://localhost:8081 in a browser
-make smoke-all              # curl-verify both apps (field-guide-api on 8080, launchpad on 8081)
+make check-tools          # verify Docker, kind, helm, kubectl, bash on PATH
+make up-all               # cluster-up → build → load → deploy BOTH apps (one command)
+make port-forward-launchpad   # second terminal: svc/launchpad → localhost:8081
+# open http://localhost:8081 — live dashboard
+make smoke-all            # curl-verify both apps (8080 field-guide-api / 8081 launchpad)
 ```
 
-Expected `make up-all` epilogue:
+Key targets: `make cluster-up`, `build`, `load`, `deploy`, `smoke`, `test`,
+`up-all`, `smoke-all`, `test-launchpad`, `verify-ttl`, `clean`, `reset-local`, plus v2.0
+`observability-up` / `observability-down` / `port-forward-grafana` and the umbrella
+`up-mission-control` (Phase 17). Bare `make` prints the full, self-documenting help.
+
+Smoke expectations (`make smoke-all`):
 
 ```
-==> up-all complete. Both apps deployed.
-==> Next: make port-forward-launchpad  (then open http://localhost:8081)
-==> Then: make smoke-all
+PASS  /health → 200       PASS  / → 200
+PASS  /entries → 200      PASS  /health → 200
+PASS  /metrics → 200      PASS  /api/status → 200
 ```
 
-Expected `make smoke-all` output:
-
-```
-==> Starting smoke test...
-  PASS  /health → 200
-  PASS  /entries → 200
-  PASS  /metrics → 200
-==> smoke PASSED
-==> Starting launchpad smoke test...
-  PASS  / → 200
-  PASS  /health → 200
-  PASS  /api/status → 200
-==> launchpad smoke PASSED
-```
-
-Run `make help` (or bare `make`) for the full target listing with one-line descriptions,
-grouped by Cluster / field-guide-api / launchpad / Stack / Housekeeping.
-
-## Demo Flow — Launchpad Dashboard
-
-The headline demo is the browser dashboard, reachable after `make up-all` +
-`make port-forward-launchpad` at **http://localhost:8081**:
-
-![Launchpad dashboard — status cards for MongoDB, Field Guide API, version, and registered services](docs/screenshots/dashboard.png)
-
-**Service catalog** — register and browse services (empty-state shown; onboarding is Ctrl+click away):
-
-![Launchpad service catalog — empty state with Onboard your first service CTA](docs/screenshots/catalog.png)
-
-**Onboard a service** — the register-a-service form, backed by MongoDB:
-
-![Launchpad onboard form — Register a Service](docs/screenshots/onboard-form.png)
-
-**Diagnostics** — in-cluster state via read-only Kubernetes API queries (ServiceAccount RBAC):
-
-![Launchpad diagnostics — platform checks and cluster state showing pods and deployments](docs/screenshots/diagnostics.png)
-
-**Activity feed** — persisted platform events, TTL-bounded in MongoDB:
-
-![Launchpad activity feed — Platform started event](docs/screenshots/feed.png)
-
-Press Ctrl-C in the `port-forward-launchpad` terminal to stop.
-
-## Developer Loop / API Workload (field-guide-api)
-
-The original PRD-1 dogfood app — a Flask field-guide REST API — still builds and deploys with
-its own one-liner:
-
-```
-make cluster-up && make build && make load && make deploy
-```
-
-```bash
-make test          # run pytest (32 tests, 100% coverage) inside an auto-managed venv
-make build         # rebuild the Docker image after code changes
-make load          # push the updated image to the local registry
-make deploy        # helm upgrade --install (idempotent; waits for pods to be Ready)
-make smoke         # confirm the live stack returns 200 on all three endpoints
-```
-
-Start a port-forward to reach the ClusterIP service on localhost:
-
-```bash
-kubectl port-forward svc/field-guide-api 8080:80
-```
-
-Then in a second terminal, hit all three endpoints:
-
-```bash
-curl -s http://localhost:8080/health
-# {"status": "ok", "mongo": "up"}
-
-curl http://localhost:8080/entries
-# []
-
-curl http://localhost:8080/metrics
-# HELP python_gc_objects_collected_total Objects collected during gc
-# TYPE python_gc_objects_collected_total counter
-# python_gc_objects_collected_total{generation="0"} 658.0
-# ...
-# HELP flask_exporter_info Information about the Flask exporter
-# TYPE flask_exporter_info gauge
-# flask_exporter_info{version="0.23.2"} 1.0
-```
-
-Press Ctrl-C in the port-forward terminal to stop.
+---
 
 ## Repository Layout
 
-| Directory | Purpose |
-|-----------|---------|
-| `apps/` | Application source code (e.g. `apps/field-guide-api/`, `apps/launchpad/`) |
-| `charts/` | Helm charts for each application (e.g. `charts/field-guide-api/`, `charts/launchpad/`) |
-| `infra/kind/` | kind cluster configuration and local registry setup |
-| `infra/argocd/` | PRD-2 GitOps seam — ArgoCD manifests (empty this milestone) |
-| `infra/observability/` | PRD-4 observability seam — Prometheus/Grafana/Loki (empty this milestone) |
-| `scripts/` | Automation scripts (cluster bootstrap, image loading, etc.) |
-| `docs/` | Project documentation |
+| Path | Purpose |
+|---|---|
+| `apps/field-guide-api/` | PRD-1 dogfood workload: Flask REST API (src, tests, Dockerfile, requirements) |
+| `apps/launchpad/` | Platform product: dashboard app (app factory, routes, templates, vendored assets, 128 tests) |
+| `charts/field-guide-api/` | Generic Helm chart + embedded mongo:7 |
+| `charts/launchpad/` | Same schema + RBAC templates + own mongo:7 |
+| `infra/kind/` | kind cluster config + local registry wiring |
+| `infra/observability/` | Trimmed kube-prometheus-stack values + ServiceMonitors + dashboard ConfigMaps (v2.0) |
+| `infra/argocd/` | Reserved GitOps seam (PRD-2, deferred) |
+| `scripts/` | `cluster-setup.sh`, `cluster-teardown.sh`, `observability-up.sh`, `observability-down.sh` |
+| `docs/` | Screenshots, troubleshooting, windows-setup, known-limitations |
+| `.planning/` | Full GSD trail: PROJECT.md, STATE.md, ROADMAP.md, per-phase PLAN/SUMMARY/REVIEW/SECURITY |
 
-## Security Note
+---
 
-The Helm chart ships with a committed local-dev MongoDB password (`fieldguide-dev-password`).
-`helm install` prints a loud warning at deploy time:
+## Milestones
 
-```
-!! WARNING: MongoDB is running with the COMMITTED local-dev password.
-!! This is acceptable ONLY on a local kind cluster.
-```
+| Milestone | Scope | Status |
+|---|---|---|
+| **v1.0 Foundation** (Phases 1-4) | App + tests, kind cluster + registry, containerization, Helm deploy, Makefile DX | ✅ shipped 2026-07-07 |
+| **v1.1 Product Dashboard** (Phases 5-10) | launchpad app factory, UI (htmx/Pico), status API, service catalog + events (CRUD, CSRF, 7-day TTL), K8s diagnostics with RBAC, own Helm chart, `make up-all` | ✅ shipped 2026-07-14 |
+| **v2.0 Observability + Mission Control** (Phases 11-17) | Trimmed kube-prometheus-stack (Phase 11 ✅ 14/14), ServiceMonitor scraping (12), Grafana dashboards-as-code (13), additive Makefile targets (14), native metric cards w/ graceful degradation (15), Mission Control dark reskin (16), demo seeding + one-command flagship demo (17) | 🔶 in progress — Phase 12 next |
+| Deferred | PRD-2 ArgoCD GitOps, Loki/logs + Alertmanager (v2.1), Trivy, AWS/EKS/Terraform | — |
 
-This is intentional for frictionless local setup. For anything beyond a local kind cluster,
-override it at deploy time:
+---
 
-```bash
-helm upgrade field-guide-api charts/field-guide-api --set mongodb.auth.password=<real-password>
-```
+## Tradeoffs & What I'd Do Differently (interview section)
 
-See [docs/known-limitations.md](docs/known-limitations.md) for the full list of PRD-1 caveats.
+- **Local-only by design, borrowed platform**: kind + local registry prove the loop but not
+  managed-cloud reality; the AWS/EKS path is deliberately deferred to the final PRD.
+- **Committed local-dev passwords** are an accepted tradeoff for one-command DX; they are loud,
+  documented, and override-safe — the convention mirrors what many real platforms ship.
+- **Dashboard without a deploy pipeline**: v1.1 registers services but doesn't (yet) wire
+  registration → real build/deploy (PLAT-01, deferred); the Helm values seam is the hook for it.
+- **Two embedded MongoDBs instead of one shared instance**: favors independent chart lifecycle
+  over resource economy — the right call for the architecture demo, wasteful at scale.
+- **No auth / single user**: scoped correctly for a portfolio demo; multi-user would force
+  real auth decisions (T-02-04 was re-evaluated at PRD-3 and stayed accepted).
 
-## Known Limitations & Roadmap
+---
 
-PRD-1 deliberately excludes ArgoCD, a platform dashboard, Prometheus/Grafana/Loki, and TLS.
-See [docs/known-limitations.md](docs/known-limitations.md) for the complete list with rationale
-and the PRD roadmap each item maps to.
-
-## Troubleshooting
-
-Common failure modes (`ImagePullBackOff`, CRLF line endings, `/health` 503, stale port-forward)
-with their causes and fixes are documented in [docs/troubleshooting.md](docs/troubleshooting.md).
+*Sources for every number above: the repo's own `.planning/` artifacts (PROJECT.md,
+STATE.md, STACK.md, *-SECURITY.md, v1.1-MILESTONE-AUDIT.md), `charts/*`, `Makefile`, and
+`infra/*` — verified 2026-08-31.*
