@@ -230,6 +230,24 @@ PASS  /metrics → 200      PASS  /api/status → 200
 
 ---
 
+## Troubleshooting notes
+
+Three issues I hit while building the local stack, and how I fixed them. The full table is in [docs/troubleshooting.md](docs/troubleshooting.md).
+
+**1. `ImagePullBackOff` on the `registry-verify` pod**
+- Cause: the containerd registry mirror was not patched on the kind nodes (`hosts.toml` missing), so the node could not pull from the local registry.
+- Fix: re-run `make cluster-up`. The setup script is idempotent and re-applies the `hosts.toml` patch to each node.
+
+**2. `no such host: kind-registry` from inside a pod**
+- Cause: the local registry container was not connected to the `kind` Docker network.
+- Fix: re-run `make cluster-up`. Step 4 of the script connects `kind-registry` to the `kind` network.
+
+**3. `/health` returns `503` right after `make deploy`**
+- Cause: `helm --wait` waits for the app pod, but MongoDB can need another 15-30 seconds to become Ready.
+- Fix: wait about 30 seconds, check with `kubectl get pods`, then retry. The app recovers once MongoDB is Ready.
+
+---
+
 ## Repository Layout
 
 | Path | Purpose |
