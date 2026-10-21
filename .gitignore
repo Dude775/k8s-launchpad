@@ -46,3 +46,20 @@ kubeconfig
 *~
 .DS_Store
 Thumbs.db
+
+# Claude Code - local only
+.claude/settings.local.json
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+
+# gsd-core (installed locally with npx, not part of the project)
+.claude/hooks/
+.claude/gsd-core/
+.claude/scripts/
+.claude/commands/gsd-*
+.claude/agents/gsd-*
+.claude/gsd-*.json
+.claude/.gsd-*
+
+# planning notes stay local
+.planning/
